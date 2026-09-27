@@ -1,0 +1,9 @@
+node_modules/
+app/node_modules/
+app/data.json
+app/.certs/
+*.log
+Hospital-System.zip
+
+app/.el-key
+app/data-archive.json

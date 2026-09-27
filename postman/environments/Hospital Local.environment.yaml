@@ -1,0 +1,11 @@
+name: Hospital Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:5000'
+    enabled: true
+  - key: patientId
+    value: ''
+    enabled: true
+  - key: tvId
+    value: ''
+    enabled: true

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reception — Register Patient</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/webp" href="logo-512.webp" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <script src="translit.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin: 0; }
+    .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; }
+    input, select { outline: none; }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen">
+
+  <header class="bg-primary-container text-on-primary px-6 py-4 shadow-lg flex items-center gap-3">
+    <div class="w-11 h-11 rounded-full bg-white p-1 flex items-center justify-center shrink-0">
+      <img src="logo-transparent.webp" alt="Hospital Logo" class="w-full h-full object-contain" />
+    </div>
+    <div>
+      <div class="font-display font-extrabold text-xl">Reception — Register Patient</div>
+      <div class="text-[12px] text-primary-fixed-dim">রোগী নিবন্ধন ও সিরিয়াল তৈরি</div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Form -->
+    <section class="bg-surface-container-lowest rounded-2xl shadow-md p-6">
+      <h2 class="font-display font-bold text-lg mb-4">New Patient</h2>
+      <form id="form" class="flex flex-col gap-3">
+        <label class="text-sm font-bold">Patient Name (English / নাম)
+          <input name="patientName" id="nameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Md. Abdul Karim অথবা মোঃ আব্দুল করিম — যেকোনো ভাষায় লিখুন" />
+          <span id="nameAutoHint" class="block text-[11px] font-semibold text-secondary mt-1 hidden"></span>
+        </label>
+        <label class="text-sm font-bold">রোগীর নাম (বাংলা)
+          <input name="patientNameBn" id="nameBn" autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="মোঃ আব্দুল করিম" />
+          <span class="block text-[11px] font-normal text-on-surface-variant mt-1">ইংরেজি লিখলে বাংলা নিজে থেকেই হবে — TV-তে দুই ভাষাতেই দেখাবে</span>
+        </label>
+        <label class="text-sm font-bold">Serial Number
+          <input name="serialNumber" id="serialInput" type="number" min="1" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="অটো — নিজে বসবে" />
+          <span id="serialHint" class="hidden block text-[11px] font-semibold text-secondary mt-1"></span>
+        </label>
+        <label class="text-sm font-bold">Consulting Doctor
+          <select name="doctorName" required id="doctorSelect" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
+            <option value="" disabled selected>Select a doctor…</option>
+          </select>
+          <span id="docMeta" class="block text-[11px] font-normal text-on-surface-variant mt-1"></span>
+        </label>
+        <label class="text-sm font-bold">Room No.
+          <input name="chamberNumber" id="chamberInput" readonly class="mt-1 w-full bg-surface-container rounded-lg px-3 py-2.5 font-medium text-on-surface-variant" placeholder="ডাক্তার বাছলে অটো" />
+          <span class="block text-[11px] font-normal text-on-surface-variant mt-1">ডাক্তার সিলেক্ট করলে রুম নম্বর অটো বসবে (ম্যানুয়ালি বদলানো যাবে না)</span>
+        </label>
+        <button class="mt-2 bg-secondary text-on-secondary rounded-xl py-3.5 font-display font-extrabold text-lg active:opacity-90 flex items-center justify-center gap-2">
+          <span class="mso">add</span> ADD PATIENT
+        </button>
+      </form>
+      <div id="confirm" class="hidden mt-4 bg-secondary-container/20 border border-secondary-container rounded-xl p-4">
+        <div class="font-bold text-secondary flex items-center gap-2"><span class="mso">check_circle</span> Patient added</div>
+        <div id="confirmText" class="text-sm mt-1"></div>
+      </div>
+    </section>
+
+    <!-- Today's list -->
+    <section class="bg-surface-container-lowest rounded-2xl shadow-md p-6 flex flex-col">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display font-bold text-lg">Today's Patients</h2>
+        <button onclick="load()" class="text-secondary text-sm font-bold flex items-center gap-1"><span class="mso text-base">refresh</span>Refresh</button>
+      </div>
+      <ul id="list" class="flex flex-col gap-2 overflow-y-auto"></ul>
+      <div id="empty" class="text-center text-on-surface-variant py-10">No patients yet.</div>
+    </section>
+  </main>
+
+  <script>
+    const socket = io();
+    const API = '/api';
+    const $ = (id) => document.getElementById(id);
+    // Escape user-supplied text before putting it in innerHTML (prevents XSS).
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    const statusStyle = {
+      WAITING:'bg-surface-container text-on-surface-variant', CALLED:'bg-secondary-container/30 text-secondary',
+      MISSED:'bg-error-container text-error', COMPLETED:'bg-surface-container-high text-outline',
+    };
+
+    /* inline form error (replaces blocking alert()) */
+    let formErrTimer = null;
+    function showFormError(msg) {
+      let el = document.getElementById('formError');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'formError';
+        el.className = 'mt-3 bg-error-container text-on-error-container rounded-xl px-4 py-3 text-sm font-bold flex items-center gap-2';
+        el.innerHTML = '<span class="mso text-[18px]">warning</span><span></span>';
+        $('form').parentNode.insertBefore(el, $('form').nextSibling);
+      }
+      el.querySelector('span:last-child').textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(formErrTimer);
+      formErrTimer = setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+
+    // Load the doctor directory into the picker; auto-fill chamber + show details.
+    let doctors = [];
+    let patients = [];
+    /* Room number = floor + chamber (floor 1, ch 03 → Room 103). */
+    const roomNo = (d) => { const c = parseInt(d && d.chamberNumber, 10); const f = parseInt(d && d.floor, 10); return (!isNaN(f) && f > 0 && !isNaN(c)) ? f * 100 + c : (isNaN(c) ? '—' : c); };
+    let breaksMap = new Map(); // doctorName -> active break (option disabled while on break)
+    async function refreshBreaks() {
+      try {
+        const list = await (await fetch(API + '/breaks')).json();
+        breaksMap = new Map((Array.isArray(list) ? list : []).map((b) => [b.doctorName, b]));
+        await loadDoctors();
+      } catch (_) {}
+    }
+    async function loadDoctors() {
+      try {
+        const res = await fetch(API + '/doctors');
+        doctors = await res.json();
+        const sel = $('doctorSelect');
+        sel.innerHTML = '<option value="" disabled selected>Select a doctor…</option>' +
+          doctors.map((d) => {
+            const onBreak = breaksMap.get(d.name);
+            return `<option value="${esc(d.name)}" ${onBreak ? 'disabled' : ''}>${onBreak ? '☕ ' : ''}${esc(d.name)} — ${esc(d.specialty || '')} (Room ${roomNo(d)})${onBreak ? ' — ব্রেকে' : ''}</option>`;
+          }).join('');
+      } catch (e) { console.error('doctors load failed', e); }
+    }
+    $('doctorSelect').addEventListener('change', (e) => {
+      const d = doctors.find((x) => x.name === e.target.value);
+      if (!d) { $('docMeta').textContent = ''; $('chamberInput').value = ''; return; }
+      $('chamberInput').value = roomNo(d);
+      $('docMeta').textContent = `${d.qualification} • ${d.specialty} • ফ্লোর ${d.floor || '—'}`;
+      // suggest the next free serial for this doctor
+      const own = patients.filter((p) => String(p.doctorName || '').toLowerCase() === d.name.toLowerCase());
+      const max = own.reduce((m, p) => Math.max(m, Number(p.serialNumber) || 0), 0);
+      const sInput = document.getElementById('serialInput');
+      const hint = document.getElementById('serialHint');
+      if (!sInput.value) {
+        sInput.value = own.length ? max + 1 : 1;   // live suggestion; server assigns if left alone
+        if (hint) { hint.textContent = 'সিরিয়াল অটো বসবে: ' + (own.length ? max + 1 : 1) + ' — চাইলে বদলাতে পারেন'; hint.classList.remove('hidden'); }
+      }
+    });
+
+    /* ---- Name auto-conversion (live): English -> Bangla, Bangla -> English ----
+       Staff type in whichever language they prefer; the other language fills in
+       automatically. Server does the same on save as a safety net. */
+    const nameEn = $('nameEn');
+    const nameBn = $('nameBn');
+    let lastEdited = null; // which field the staff last typed in
+    let translitTimer = null;
+    // Accurate English -> Bangla via the server (Google), debounced. Falls back
+    // to the local rule-based converter instantly / when offline.
+    async function autoBangla(v) {
+      const hint = $('nameAutoHint');
+      // instant local guess first (so it never feels laggy)
+      let bn = window.translit ? window.translit.toBangla(v) : '';
+      if (lastEdited === 'en' && bn) { nameBn.value = bn; hint.textContent = 'বাংলা নাম অটো: ' + bn; hint.classList.remove('hidden'); }
+      clearTimeout(translitTimer);
+      translitTimer = setTimeout(async () => {
+        try {
+          const r = await (await fetch(API + '/translit?text=' + encodeURIComponent(v))).json();
+          if (r && r.bangla && lastEdited === 'en' && nameEn.value.trim() === v) {
+            nameBn.value = r.bangla;
+            hint.textContent = 'বাংলা নাম অটো: ' + r.bangla;
+            hint.classList.remove('hidden');
+          }
+        } catch (e) { /* offline — keep the local guess */ }
+      }, 350);
+    }
+    nameEn.addEventListener('input', () => {
+      lastEdited = 'en';
+      if (!window.translit) return;
+      const v = nameEn.value.trim();
+      const hint = $('nameAutoHint');
+      if (!v) { hint.classList.add('hidden'); return; }
+      if (window.translit.detectScript(v) === 'en') {
+        autoBangla(v);
+      } else {
+        const en = window.translit.toEnglish(v);
+        if (en) { hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
+      }
+    });
+    nameBn.addEventListener('input', () => {
+      lastEdited = 'bn';
+      if (!window.translit) return;
+      const v = nameBn.value.trim();
+      const hint = $('nameAutoHint');
+      if (!v) { if (lastEdited === 'bn') hint.classList.add('hidden'); return; }
+      if (window.translit.detectScript(v) === 'bn') {
+        const en = window.translit.toEnglish(v);
+        if (en) { nameEn.value = en; hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
+      }
+    });
+
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const payload = {
+        patientName: fd.get('patientName'),
+        patientNameBn: fd.get('patientNameBn') || '',
+        serialNumber: Number(fd.get('serialNumber')),
+        doctorName: fd.get('doctorName'),
+        chamberNumber: fd.get('chamberNumber'),
+      };
+      // Bangla-typed name: server stores it as patientNameBn and fills English.
+      // (The API takes patientName as the primary field either way.)
+      const res = await fetch(API + '/patients', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (res.status === 201) {
+        const p = await res.json();
+        $('confirm').classList.remove('hidden');
+        // room from the local directory (response has no floor)
+        const dObj = doctors.find((x) => x.name === p.doctorName);
+        $('confirmText').textContent = `✅ যোগ হলো Serial ${p.serialNumber} — ${p.patientName} → ${p.doctorName}, রুম ${dObj ? roomNo(dObj) : (p.chamberNumber || '—')}`;
+        e.target.reset();
+        $('docMeta').textContent = '';
+        $('chamberInput').value = '';
+        $('nameAutoHint').classList.add('hidden');
+        const sh = document.getElementById('serialHint');
+        if (sh) sh.classList.add('hidden');
+        // Reset the serial suggestion for the next patient (SIMPLE SERIAL).
+        const own = patients.filter((p) => String(p.doctorName || '').toLowerCase() === String(fd.get('doctorName') || '').toLowerCase());
+        const next = own.reduce((m, p) => Math.max(m, Number(p.serialNumber) || 0), 0) + 1;
+        const sInput = document.getElementById('serialInput');
+        if (sInput && fd.get('doctorName')) { sInput.value = next; if (sh) { sh.textContent = 'পরের সিরিয়াল: ' + next; sh.classList.remove('hidden'); } }
+        load();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showFormError(err.message || 'রোগী যোগ করা যায়নি');
+      }
+    });
+
+    async function load() {
+      const res = await fetch(API + '/patients');
+      patients = await res.json();
+      $('empty').style.display = patients.length ? 'none' : 'block';
+      $('list').innerHTML = patients.map((p) => `
+        <li class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
+          <span class="font-mono font-extrabold text-xl w-9 text-center text-secondary">${esc(p.serialNumber)}</span>
+          <span class="font-bold flex-1 truncate">${esc(p.patientName)}</span>
+          <span class="text-[11px] font-bold px-2 py-0.5 rounded ${statusStyle[p.status] || ''}">${esc(p.status)}</span>
+        </li>`).join('');
+    }
+
+    socket.on('patient.added', load);
+    socket.on('patient.updated', load);
+    socket.on('patient.called', load);
+    socket.on('break.started', refreshBreaks);
+    socket.on('break.ended', refreshBreaks);
+    loadDoctors();
+    refreshBreaks();
+    load();
+  </script>
+</body>
+</html>

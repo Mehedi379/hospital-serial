@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hospital Smart Serial & Voice Calling System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/webp" href="logo-512.webp" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <script src="avatars.js"></script>
+  <style>.mso{font-family:'Material Symbols Outlined';}</style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen flex flex-col items-center justify-start p-6">
+
+  <div class="text-center mb-6 mt-4">
+    <img src="logo-transparent.webp" alt="Hospital Logo" class="w-20 h-20 object-contain mx-auto mb-2" />
+    <h1 class="font-display font-extrabold text-3xl mt-1">Hospital Smart Serial &amp; Voice Calling System</h1>
+    <p class="text-on-surface-variant mt-1">Open each screen on its own device</p>
+  </div>
+
+  <!-- Common screens -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl w-full mb-8">
+    <a href="reception.html" class="bg-surface-container-lowest rounded-2xl shadow-md p-5 text-center hover:shadow-lg transition">
+      <span class="mso text-secondary text-4xl">how_to_reg</span>
+      <div class="font-display font-bold text-lg mt-2">Reception</div>
+      <div class="text-sm text-on-surface-variant">Register patients</div>
+    </a>
+    <a href="assistant.html" class="bg-surface-container-lowest rounded-2xl shadow-md p-5 text-center hover:shadow-lg transition">
+      <span class="mso text-secondary text-4xl">phone_in_talk</span>
+      <div class="font-display font-bold text-lg mt-2">Assistant (All)</div>
+      <div class="text-sm text-on-surface-variant">Every doctor's queue</div>
+    </a>
+    <a href="tv.html" class="bg-surface-container-lowest rounded-2xl shadow-md p-5 text-center hover:shadow-lg transition">
+      <span class="mso text-secondary text-4xl">tv</span>
+      <div class="font-display font-bold text-lg mt-2">Waiting Hall TV</div>
+      <div class="text-sm text-on-surface-variant">All doctors + voice</div>
+    </a>
+    <a href="admin.html" class="bg-primary-container text-on-primary rounded-2xl shadow-md p-5 text-center hover:shadow-lg transition">
+      <span class="mso text-secondary-container text-4xl">settings</span>
+      <div class="font-display font-bold text-lg mt-2">Admin Setup</div>
+      <div class="text-sm text-primary-fixed-dim">Doctors • Rooms • Floors</div>
+    </a>
+  </div>
+
+  <!-- Per-doctor screens -->
+  <div class="max-w-4xl w-full">
+    <div class="flex items-center justify-between mb-3 px-1">
+      <h2 class="font-display font-bold text-xl">Per-Doctor Screens</h2>
+      <span class="text-[12px] text-on-surface-variant">প্রতি ডাক্তারের আলাদা Assistant + Room TV</span>
+    </div>
+    <div class="bg-secondary-fixed/60 text-on-secondary-fixed rounded-xl px-4 py-3 mb-3 text-[13px] flex flex-wrap items-center gap-2">
+      <span class="mso text-[18px]">bolt</span>
+      <span><b>শর্টকাট:</b> TV-তে শুধু লিখুন <code class="font-mono font-bold" id="shortHint">http://&lt;PC-IP&gt;:5000/tv/রুমনম্বর</code> — যেমন <b>/tv/03</b> = রুম-০৩ এর TV। পুরো গাইড: <a href="SETUP-GUIDE.md" target="_blank" class="font-bold underline">SETUP-GUIDE.md</a></span>
+    </div>
+    <div id="doctorGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="col-span-full text-center text-on-surface-variant py-6">Loading doctors…</div>
+    </div>
+  </div>
+
+<script>
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  async function loadDoctors() {
+    try {
+      const res = await fetch('/api/doctors');
+      const doctors = await res.json();
+      const grid = document.getElementById('doctorGrid');
+      if (!doctors.length) {
+        grid.innerHTML = '<div class="col-span-full text-center text-on-surface-variant py-6">No doctors yet — add them from <a href="admin.html" class="text-secondary font-bold underline">Admin Setup</a>.</div>';
+        return;
+      }
+      grid.innerHTML = doctors.map((d) => {
+        const av = window.doctorAvatar(d.name, d.nameBn, d.photoURL);
+        const cf = parseInt(d.chamberNumber, 10), fl = parseInt(d.floor, 10);
+        const rn = (!isNaN(fl) && fl > 0 && !isNaN(cf)) ? fl * 100 + cf : (isNaN(cf) ? '—' : cf);
+        return `
+        <div class="bg-surface-container-lowest rounded-2xl shadow-md p-4 flex items-center gap-3" data-doc="${encodeURIComponent(d.name)}">
+          ${av.img
+            ? `<img src="${esc(d.photoURL)}" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-secondary-fixed" />`
+            : `<img src="${av.icon}" class="w-14 h-14 rounded-full object-cover shrink-0 bg-surface-container-low" />`}
+          <div class="w-11 h-11 rounded-xl bg-secondary-fixed text-on-secondary-fixed flex flex-col items-center justify-center shrink-0">
+            <span class="text-[8px] uppercase font-bold opacity-70">Room</span>
+            <span class="font-mono font-extrabold text-base leading-none">${rn}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-display font-bold truncate">${esc(d.name)}</div>
+            <div class="text-[12px] text-on-surface-variant truncate">${esc(d.specialty || '')}${d.floor ? ' • Floor ' + esc(d.floor) : ''}</div>
+            <div class="text-[11px] font-mono text-outline mt-0.5 truncate">/tv/${rn} · /assist/${rn}</div>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <a href="assistant.html?doctor=${encodeURIComponent(d.name)}&install=1" class="flex flex-col items-center px-3 py-2 rounded-xl bg-primary text-on-primary hover:opacity-90 transition" title="মোবাইলে খুলে চাপুন — হাসপাতালের লোগোসহ হোম স্ক্রিনে অ্যাপ বসবে">
+              <span class="mso text-xl">add_to_home_screen</span>
+              <span class="text-[10px] font-bold mt-0.5">HOME</span>
+            </a>
+            <a href="assistant.html?doctor=${encodeURIComponent(d.name)}" class="flex flex-col items-center px-3 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container transition" title="Assistant for this doctor">
+              <span class="mso text-secondary text-xl">phone_in_talk</span>
+              <span class="text-[10px] font-bold mt-0.5">ASSIST</span>
+            </a>
+            <a href="tv.html?doctor=${encodeURIComponent(d.name)}" class="flex flex-col items-center px-3 py-2 rounded-xl bg-primary-container text-on-primary hover:opacity-90 transition" title="Room TV for this doctor">
+              <span class="mso text-secondary-container text-xl">tv</span>
+              <span class="text-[10px] font-bold mt-0.5">TV</span>
+            </a>
+          </div>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      document.getElementById('doctorGrid').innerHTML = '<div class="col-span-full text-center text-error py-6">Could not load doctors — is the server running?</div>';
+    }
+  }
+  loadDoctors();
+  setInterval(loadDoctors, 10000); // keep in sync with admin changes + break states
+
+  /* Break badges on the launcher cards (lunch / namaz / other). */
+  async function refreshBreaks() {
+    try {
+      const list = await (await fetch('/api/breaks')).json();
+      const on = new Map((Array.isArray(list) ? list : []).map((b) => [b.doctorName, b]));
+      document.querySelectorAll('#doctorGrid [data-doc]').forEach((card) => {
+        const doc = decodeURIComponent(card.dataset.doc || '');
+        const b = on.get(doc);
+        let badge = card.querySelector('.break-badge');
+        if (b && !badge) {
+          badge = document.createElement('div');
+          badge.className = 'break-badge';
+          badge.style.cssText = 'display:flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:999px;background:#fffbeb;border:1px solid #f59e0b;color:#92400e;font-size:10px;font-weight:800;width:fit-content;';
+          badge.innerHTML = '<span class="mso" style="font-size:12px;">restaurant</span><span>ব্রেকে</span>';
+          card.querySelector('.flex-1.min-w-0').appendChild(badge);
+      } else if (!b && badge) badge.remove();
+      });
+    } catch (_) {}
+  }
+  refreshBreaks();
+  setInterval(refreshBreaks, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Assistant Panel — Hospital Smart Queue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/webp" href="logo-512.webp" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <!-- PWA: installable "app" on any phone/tablet. Manifest is injected per-doctor by script. -->
+  <meta name="theme-color" content="#3a0a0d" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Assistant" />
+  <script>
+    // Point the manifest at THIS doctor so the installed app opens their panel.
+    (function () {
+      var doctor = (new URLSearchParams(location.search).get('doctor') || '').trim();
+      var href = '/manifest.webmanifest' + (doctor ? '?doctor=' + encodeURIComponent(doctor) : '');
+      var l = document.createElement('link');
+      l.rel = 'manifest'; l.href = href;
+      document.head.appendChild(l);
+      if (doctor) document.querySelector('meta[name="apple-mobile-web-app-title"]').content = doctor;
+    })();
+  </script>
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <script src="avatars.js"></script>
+  <script src="translit.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    html, body { margin: 0; }
+    body { overscroll-behavior: none; }
+    .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; line-height: 1; }
+    ::-webkit-scrollbar { display: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    button:active { transform: scale(0.97); }
+    input, select { outline: none; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    /* The fixed header is 5rem tall PLUS the safe-area inset (notch/status bar in
+       installed/standalone PWA mode). Main content must clear BOTH, or the metrics
+       row slides under the header. */
+    .main-top { padding-top: calc(5rem + env(safe-area-inset-top, 0px)); }
+    /* Modal open -> freeze the page behind (fixes background scroll-jump) */
+    body.modal-open { overflow: hidden; touch-action: none; }
+    /* Disabled big buttons are visibly dead + un-clickable */
+    .btn-dead { opacity: .38; pointer-events: auto; }
+    .btn-dead:active { transform: none; }
+    /* A click ALWAYS answers visually (works even when Tailwind is late) */
+    button.pressed { filter: brightness(.8); transform: scale(.96); }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body select-none flex flex-col min-h-screen pb-28">
+
+  <!-- =============== HEADER =============== -->
+  <header class="fixed top-0 w-full z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,.06)] pt-safe">
+    <div class="h-20 px-4 flex items-center justify-between gap-2 max-w-lg mx-auto">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-10 h-10 rounded-full bg-primary-container p-0.5 flex items-center justify-center shrink-0">
+          <img id="hdrAvatar" src="logo-transparent.webp" alt="Logo" class="w-full h-full object-contain" />
+        </div>
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span id="hdrDoctor" class="font-display font-bold text-lg text-on-surface truncate">Assistant Panel</span>
+            <span id="hdrChamber" class="inline-flex items-center px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-bold uppercase shrink-0">—</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-on-surface-variant uppercase tracking-wider">Voice Calling</span>
+            <span class="text-outline-variant text-[11px]">•</span>
+            <div id="conn" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container-high">
+              <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+              <span class="text-[11px] text-secondary font-bold tracking-tight">LIVE SYNCED</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="installBtn" onclick="installApp()" class="hidden h-10 px-3 rounded-full bg-primary-container text-on-primary items-center gap-1.5 shadow-md">
+          <span class="mso text-[18px]">install_mobile</span><span class="text-[13px] font-bold">Install</span>
+        </button>
+        <button onclick="openAddModal()" class="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-md">
+          <span class="mso text-[22px]">person_add</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex flex-col w-full px-4 main-top max-w-lg mx-auto gap-4 pb-6">
+
+    <!-- Live shift metrics -->
+    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-3">
+      <div class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container shrink-0">
+        <span class="text-[11px] text-on-surface-variant">Registered</span>
+        <span id="mRegistered" class="font-mono text-sm font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container shrink-0">
+        <span class="text-[11px] text-on-surface-variant">Served</span>
+        <span id="mServed" class="font-mono text-sm font-bold text-secondary">0</span>
+      </div>
+      <div class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-secondary-fixed text-on-secondary-fixed shrink-0">
+        <span class="text-[11px]">Waiting</span>
+        <span id="mWaiting" class="font-mono text-sm font-bold">0</span>
+      </div>
+      <div class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-error-container text-on-error-container shrink-0">
+        <span class="text-[11px]">Missed</span>
+        <span id="mMissed" class="font-mono text-sm font-bold">0</span>
+      </div>
+    </div>
+
+    <!-- HERO: NOW CALLING -->
+    <div id="heroCard" class="relative overflow-hidden rounded-2xl bg-primary-container text-on-primary shadow-md p-4 flex flex-col gap-4 transition-transform">
+      <div class="absolute -right-6 -bottom-6 w-36 h-36 rounded-full bg-secondary/10 pointer-events-none blur-xl"></div>
+
+      <div class="flex items-center justify-between relative z-10">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary text-on-secondary">
+          <span class="mso text-[16px] animate-pulse">volume_up</span>
+          <span class="text-[11px] tracking-wider uppercase font-bold">VOICE CALLING NOW</span>
+        </div>
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-highest/20 text-secondary-fixed-dim text-[11px]">
+          <span class="mso text-[14px]">podcasts</span> TV BROADCASTING
+        </span>
+      </div>
+
+      <div class="flex items-start justify-between gap-2 relative z-10 pt-1">
+        <div class="flex flex-col min-w-0">
+          <span class="text-[11px] text-on-primary-container tracking-widest uppercase">CURRENT SERIAL NUMBER</span>
+          <div class="flex items-baseline gap-2">
+            <span id="curSerial" class="font-mono text-6xl text-secondary-fixed font-extrabold leading-none">--</span>
+            <span id="curChamberTag" class="text-[11px] text-secondary-fixed-dim uppercase tracking-wider"></span>
+          </div>
+          <div class="flex flex-col mt-1">
+            <span id="curName" class="font-display text-2xl text-white font-bold truncate">No patient</span>
+            <span id="curNameBn" class="text-sm text-secondary-fixed"></span>
+            <span id="curDoctor" class="text-sm text-primary-fixed-dim">Press CALL on a patient below</span>
+          </div>
+        </div>
+        <div id="curStatusTag" class="flex flex-col items-end gap-1 shrink-0">
+          <span class="px-2.5 py-1 rounded-lg bg-secondary/20 text-secondary-fixed text-[11px] text-right font-bold uppercase">Idle</span>
+        </div>
+      </div>
+
+      <!-- current-patient actions -->
+      <div class="grid grid-cols-3 gap-2 relative z-10 pt-2 border-t border-white/10">
+        <button onclick="action('recall')" id="btnRecall" class="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-white/10 active:bg-white/20">
+          <span class="mso text-[20px] text-secondary-fixed">campaign</span>
+          <span class="text-xs font-bold">RECALL</span>
+        </button>
+        <button onclick="action('missed')" id="btnMissed" class="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-error/70 text-on-error active:opacity-90">
+          <span class="mso text-[20px]">person_off</span>
+          <span class="text-xs font-bold">MISSED</span>
+        </button>
+        <button onclick="action('complete')" id="btnDone" class="flex flex-col items-center gap-1 py-2.5 rounded-xl bg-secondary text-on-secondary active:opacity-90">
+          <span class="mso text-[20px]">check_circle</span>
+          <span class="text-xs font-bold">DONE</span>
+        </button>
+      </div>
+      <!-- live hint: tells the assistant exactly what to do next -->
+      <div id="heroHint" class="text-center text-[11px] text-secondary-fixed-dim font-semibold relative z-10"></div>
+    </div>
+
+    <!-- Primary: NEXT PATIENT (unlocks only after DONE / MISSED) -->
+    <button onclick="callNext()" id="btnNext" class="w-full h-16 rounded-2xl bg-secondary text-on-secondary active:scale-[.98] transition flex items-center justify-between px-4 shadow-md">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
+          <span class="mso text-[24px]">skip_next</span>
+        </div>
+        <div class="flex flex-col items-start text-left">
+          <span class="text-[11px] uppercase tracking-wider text-secondary-fixed">SUMMON NEXT IN QUEUE</span>
+          <span id="nextLabel" class="font-display text-base font-bold leading-tight">No waiting patients</span>
+        </div>
+      </div>
+      <span class="mso text-[28px]">arrow_forward</span>
+    </button>
+
+    <!-- Doctor break bar (shown while THIS doctor is on break) -->
+    <div id="breakBar" class="hidden w-full rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="breakIcon" class="mso text-amber-600 text-[26px]">restaurant</span>
+        <div class="flex flex-col min-w-0">
+          <span id="breakLabel" class="font-display font-bold text-amber-700 truncate">ব্রেক চলছে</span>
+          <span id="breakSub" class="text-[11px] text-amber-700/80">নতুন কল ব্লকড — ব্রেক শেষ করলে আবার ডাকা যাবে</span>
+        </div>
+      </div>
+      <button onclick="endBreak()" class="px-3 py-2 rounded-xl bg-amber-500 text-white font-bold text-xs shrink-0 active:scale-95 transition flex items-center gap-1">
+        <span class="mso text-[18px]">play_arrow</span><span>শেষ করুন</span>
+      </button>
+    </div>
+    <!-- break type picker -->
+    <div id="breakPicker" class="hidden grid-cols-5 gap-2">
+      <button onclick="startBreak('lunch')" class="py-2.5 rounded-xl bg-amber-100 text-amber-800 font-bold text-xs flex flex-col items-center gap-1 active:scale-95 transition"><span class="mso text-[20px]">restaurant</span>লাঞ্চ</button>
+      <button onclick="startBreak('namaz')" class="py-2.5 rounded-xl bg-emerald-100 text-emerald-800 font-bold text-xs flex flex-col items-center gap-1 active:scale-95 transition"><span class="mso text-[20px]">mosque</span>নামাজ</button>
+      <button onclick="startBreak('report')" class="py-2.5 rounded-xl bg-blue-100 text-blue-800 font-bold text-xs flex flex-col items-center gap-1 active:scale-95 transition"><span class="mso text-[20px]">clinical_notes</span>রিপোর্ট</button>
+      <button onclick="startBreak('other')" class="py-2.5 rounded-xl bg-sky-100 text-sky-800 font-bold text-xs flex flex-col items-center gap-1 active:scale-95 transition"><span class="mso text-[20px]">coffee</span>অন্যান্য</button>
+      <button onclick="toggleBreakPicker(false)" class="py-2.5 rounded-xl bg-surface-container text-on-surface-variant font-bold text-xs flex flex-col items-center gap-1 active:scale-95 transition"><span class="mso text-[20px]">close</span>বাতিল</button>
+    </div>
+    <button onclick="toggleBreakPicker(true)" id="btnBreak" class="w-full items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 active:scale-95 transition hidden">
+      <span class="mso text-[20px]">free_breakfast</span><span class="text-sm font-bold">BREAK — ব্রেক নিন (লাঞ্চ / নামাজ / রিপোর্ট / অন্যান্য)</span>
+    </button>
+
+    <!-- Keypad shortcut -->
+    <button onclick="openSerialModal()" class="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-container-lowest text-on-surface shadow-sm active:scale-95">
+      <span class="mso text-[20px] text-secondary">dialpad</span>
+      <span class="text-sm font-bold">Jump to a Serial #</span>
+    </button>
+
+    <!-- UP NEXT queue -->
+    <div class="flex flex-col gap-2 mt-1">
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-2">
+          <span class="font-display font-bold text-lg">Up Next</span>
+          <span id="waitingBadge" class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-bold">0 Waiting</span>
+        </div>
+        <button onclick="load()" class="flex items-center gap-1 text-on-surface-variant text-[13px] py-1 px-2 rounded-lg bg-surface-container">
+          <span class="mso text-[16px]">refresh</span><span>Refresh</span>
+        </button>
+      </div>
+      <ul id="queue" class="flex flex-col gap-2"></ul>
+      <div id="empty" class="text-center text-on-surface-variant py-8 text-sm">No patients yet. Tap + to add.</div>
+    </div>
+
+    <!-- Reset only THIS doctor's today list (serial restarts from 1) -->
+    <button onclick="resetMine()" class="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-error-container text-on-error-container font-bold text-sm active:scale-95">
+      <span class="mso text-[18px]">restart_alt</span> আজকের রোগী মুছে সিরিয়াল ১ থেকে শুরু
+    </button>
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed top-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-inverse-surface text-inverse-on-surface text-[13px] shadow-xl flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none translate-y-2">
+    <span class="mso text-[18px] text-secondary-fixed">campaign</span>
+    <span id="toastText">…</span>
+  </div>
+
+  <!-- =============== ADD PATIENT MODAL =============== -->
+  <div id="addModal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm items-end justify-center hidden">
+    <div class="w-full max-w-lg bg-surface-container-lowest rounded-t-2xl p-4 flex flex-col gap-3 shadow-2xl pb-safe">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="mso text-secondary text-[22px]">person_add</span>
+          <span class="font-display font-bold text-lg">Add New Patient</span>
+        </div>
+        <button onclick="closeAddModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
+      </div>      <form id="addForm" class="flex flex-col gap-3">
+        <label class="text-sm font-bold">Patient Name (English / নাম)
+          <input name="patientName" id="aNameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Md. Abdul Karim অথবা মোঃ আব্দুল করিম" />
+          <span id="aNameHint" class="block text-[11px] font-semibold text-secondary mt-1 hidden"></span>
+        </label>
+        <label class="text-sm font-bold">রোগীর নাম (বাংলা)
+          <input name="patientNameBn" id="aNameBn" autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="মোঃ আব্দুল করিম" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm font-bold">Serial No.
+            <input name="serialNumber" id="aSerial" type="number" min="1" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="অটো" />
+            <span class="block text-[11px] font-normal text-on-surface-variant mt-1">খালি রাখুন — সিরিয়াল নিজে নিজে বসবে</span>
+          </label>
+          <label class="text-sm font-bold">Room No.
+            <input name="chamberNumber" id="aChamber" readonly class="mt-1 w-full bg-surface-container rounded-lg px-3 py-2.5 font-medium text-on-surface-variant" placeholder="auto" />
+          </label>
+        </div>
+        <label class="text-sm font-bold">Consulting Doctor
+          <select name="doctorName" id="docSelect" required class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
+            <option value="" disabled selected>Select a doctor…</option>
+          </select>
+          <span id="docMeta" class="block text-[11px] font-normal text-on-surface-variant mt-1"></span>
+        </label>
+        <button class="mt-1 bg-secondary text-on-secondary rounded-xl py-3.5 font-display font-extrabold text-lg active:opacity-90 flex items-center justify-center gap-2">
+          <span class="mso">add</span> ADD PATIENT
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- =============== ADD TO HOME SCREEN GUIDE (iPhone / browsers without auto prompt) =============== -->
+  <div id="installGuide" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm items-end justify-center hidden">
+    <div class="w-full max-w-lg bg-surface-container-lowest rounded-t-2xl p-5 flex flex-col gap-3 shadow-2xl pb-safe">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="mso text-secondary text-[22px]">add_to_home_screen</span>
+          <span class="font-display font-bold text-lg">Home Screen-এ যোগ করুন</span>
+        </div>
+        <button onclick="closeInstallGuide()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
+      </div>
+      <p class="text-sm text-on-surface-variant">এই প্যানেলটা <b>হাসপাতালের লোগো আইকনসহ</b> হোম স্ক্রিনে অ্যাপ হিসেবে বসে যাবে — ট্যাপ করলেই সরাসরি এই Doctor-র প্যানেল খুলবে।</p>
+      <div class="text-sm font-medium flex flex-col gap-2 bg-surface-container-low rounded-xl p-3">
+        <div><b>১.</b> ব্রাউজারের <b>Share (⎋)</b> অথবা <b>⋮ মেনু</b> বাটনে চাপুন</div>
+        <div><b>২.</b> <b>"Add to Home screen"</b> / <b>"হোম স্ক্রিনে যোগ করুন"</b> অপশনটা খুঁজে চাপুন</div>
+        <div><b>৩.</b> <b>Add / ইনস্টল</b> চাপলেই হাসপাতালের লোগো আইকনটা হোম স্ক্রিনে চলে আসবে</div>
+      </div>
+      <button onclick="closeInstallGuide()" class="bg-secondary text-on-secondary rounded-xl py-3 font-display font-extrabold flex items-center justify-center gap-2">
+        <span class="mso">check</span> বুঝেছি
+      </button>
+    </div>
+  </div>
+
+  <!-- =============== KEYPAD MODAL =============== -->
+  <div id="keypadModal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm items-end justify-center hidden">
+    <div class="w-full max-w-lg bg-surface-container-lowest rounded-t-2xl p-4 flex flex-col gap-4 shadow-2xl pb-safe">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2"><span class="mso text-secondary text-[22px]">dialpad</span><span class="font-display font-bold text-lg">Jump to Serial</span></div>
+        <button onclick="closeSerialModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
+      </div>
+      <input id="serialInput" inputmode="numeric" readonly class="w-full h-14 rounded-xl bg-surface-container px-4 font-mono text-2xl text-center" placeholder="e.g. 15" />
+      <div id="serialHint" class="text-center text-[12px] text-on-surface-variant -mt-2"></div>
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="kp('1')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">1</button>
+        <button onclick="kp('2')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">2</button>
+        <button onclick="kp('3')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">3</button>
+        <button onclick="kp('4')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">4</button>
+        <button onclick="kp('5')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">5</button>
+        <button onclick="kp('6')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">6</button>
+        <button onclick="kp('7')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">7</button>
+        <button onclick="kp('8')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">8</button>
+        <button onclick="kp('9')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">9</button>
+        <button onclick="kpClear()" class="h-12 rounded-lg bg-error-container text-on-error-container text-sm font-bold">CLEAR</button>
+        <button onclick="kp('0')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">0</button>
+        <button onclick="submitKeypad()" class="h-12 rounded-lg bg-secondary text-on-secondary text-sm font-bold">CALL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== BOTTOM NAV =============== -->
+  <nav class="fixed bottom-0 w-full z-40 pb-safe bg-surface-container-lowest/90 backdrop-blur-xl shadow-[0_-2px_12px_rgba(0,0,0,.05)]">
+    <div class="flex justify-around items-center h-20 px-2 max-w-lg mx-auto">
+      <button onclick="setFilter('all')" data-nav="all" class="nav-btn flex flex-col items-center gap-1 min-w-[56px] text-secondary">
+        <span class="mso text-[24px]">campaign</span><span class="text-[11px] font-semibold">Calling</span>
+      </button>
+      <button onclick="setFilter('waiting')" data-nav="waiting" class="nav-btn flex flex-col items-center gap-1 min-w-[56px] text-on-surface-variant">
+        <span class="mso text-[24px]">format_list_numbered</span><span class="text-[11px] font-semibold">Queue</span>
+      </button>
+      <button onclick="setFilter('missed')" data-nav="missed" class="nav-btn relative flex flex-col items-center gap-1 min-w-[56px] text-on-surface-variant">
+        <div class="relative flex items-center justify-center">
+          <span class="mso text-[24px]">person_off</span>
+          <span id="missedDot" class="absolute -top-1 -right-2 bg-error text-on-error text-[10px] rounded-full h-4 min-w-[16px] px-1 flex items-center justify-center hidden">0</span>
+        </div>
+        <span class="text-[11px] font-semibold">Missed</span>
+      </button>
+      <button onclick="setFilter('completed')" data-nav="completed" class="nav-btn flex flex-col items-center gap-1 min-w-[56px] text-on-surface-variant">
+        <span class="mso text-[24px]">history</span><span class="text-[11px] font-semibold">Done</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    const socket = io();
+    const API = '/api';
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    let patients = [];
+    let doctors = [];
+    /* Room number displayed everywhere = floor + chamber (floor 1, ch 03 → Room 103). */
+    const roomNo = (d) => { const c = parseInt(d && d.chamberNumber, 10); const f = parseInt(d && d.floor, 10); return (!isNaN(f) && f > 0 && !isNaN(c)) ? f * 100 + c : (isNaN(c) ? '—' : c); };
+    const roomOf = (p) => { const c = parseInt(p && p.chamberNumber, 10); const f = parseInt(p && p.floor, 10); return (!isNaN(f) && f > 0 && !isNaN(c)) ? f * 100 + c : (isNaN(c) ? (p && p.chamberNumber) || '—' : c); };
+    let current = null;
+    let filter = 'all';
+
+    /* ---- Per-doctor mode: assistant.html?doctor=Dr.+Name ----
+       This phone/tablet then belongs to ONE doctor: header shows the doctor,
+       queue/metrics/next-patient only consider that doctor's patients. */
+    const DOCTOR_FILTER = (new URLSearchParams(location.search).get('doctor') || '').trim();
+    const matchesDoctor = (p) => !DOCTOR_FILTER || String(p.doctorName || '').trim().toLowerCase() === DOCTOR_FILTER.toLowerCase();
+
+    async function applyDoctorHeader() {
+      if (!DOCTOR_FILTER) return;
+      try {
+        const res = await fetch(API + '/doctors');
+        const docs = await res.json();
+        const d = docs.find((x) => x.name.toLowerCase() === DOCTOR_FILTER.toLowerCase());
+        $('hdrDoctor').textContent = d ? d.name : DOCTOR_FILTER;
+        $('hdrChamber').textContent = 'Room ' + roomNo(d);
+        document.title = 'Assistant — ' + (d ? d.name : DOCTOR_FILTER);
+        // Doctor avatar (female/male auto) replaces the logo in per-doctor mode
+        if (d) {
+          const av = window.doctorAvatar(d.name, d.nameBn, d.photoURL);
+          const img = $('hdrAvatar');
+          img.src = av.img ? av.img : av.icon;
+          img.style.objectFit = 'cover';
+          img.style.borderRadius = '9999px';
+        }
+        // In per-doctor mode, default the Add-Patient form to this doctor.
+        if (d) {
+          const sel = $('docSelect');
+          if (sel) { sel.innerHTML = `<option value="${esc(d.name)}" selected>${esc(d.name)} — ${esc(d.specialty)} (Room ${roomNo(d)})</option>`; sel.disabled = true; }
+          const ch = $('addForm') && $('addForm').chamberNumber;
+          if (ch) ch.value = d.chamberNumber || '';
+        }
+      } catch (e) { console.error('doctor header failed', e); }
+    }
+
+    const statusStyle = {
+      WAITING:   'bg-surface-container text-on-surface-variant',
+      CALLED:    'bg-secondary-container/30 text-secondary',
+      MISSED:    'bg-error-container text-error',
+      COMPLETED: 'bg-surface-container-high text-outline',
+    };
+
+    /* ---------- Toast (success / error / warn / info with icons) ---------- */
+    let toastTimer = null;
+    const TOAST_STYLE = {
+      ok:   { icon: 'check_circle', cls: 'bg-surface-container-highest text-on-surface' },
+      warn: { icon: 'warning',      cls: 'bg-error text-on-error' },
+      err:  { icon: 'error',        cls: 'bg-error text-on-error' },
+      info: { icon: 'info',         cls: 'bg-surface-container-highest text-on-surface' },
+    };
+    function showToast(text, kind) {
+      const k = TOAST_STYLE[kind] || TOAST_STYLE.ok;
+      $('toastText').textContent = text;
+      const t = $('toast');
+      t.querySelector('.mso').textContent = k.icon;
+      t.className = t.className.replace(/bg-\S+|text-on-\S+/g, '').trim();
+      t.classList.add(...k.cls.split(' '));
+      t.classList.remove('opacity-0','pointer-events-none','translate-y-2');
+      t.classList.add('opacity-100','translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        t.classList.add('opacity-0','pointer-events-none','translate-y-2');
+        t.classList.remove('opacity-100','translate-y-0');
+      }, 2600);
+    }
+
+    /* ---------- Load doctors ---------- */
+    async function loadDoctors() {
+      try {
+        const res = await fetch(API + '/doctors');
+        doctors = await res.json();
+        $('docSelect').innerHTML = '<option value="" disabled selected>Select a doctor…</option>' +
+          doctors.map((d) => `<option value="${esc(d.name)}">${esc(d.name)} — ${esc(d.specialty)} (Room ${roomNo(d)})</option>`).join('');
+      } catch (e) { console.error('doctors load failed', e); }
+    }
+    document.addEventListener('change', (e) => {
+      if (e.target && e.target.id === 'docSelect') {
+        syncChamber(e.target.value);
+        prefillSerial();
+      }
+    });
+
+    /* ---------- Load patients ---------- */
+    async function load() {
+      try {
+        const res = await fetch(API + '/patients');
+        patients = await res.json();
+        // keep the hero card in sync if the current patient changed elsewhere
+        if (current) {
+          const fresh = patients.find((p) => p.id === current.id);
+          if (fresh) current = fresh;
+        }
+        renderMetrics();
+        updateActionButtons();
+        render();
+      } catch (e) { console.error(e); }
+    }
+
+    function renderMetrics() {
+      const mine = patients.filter(matchesDoctor); // per-doctor mode counts only own patients
+      const waiting = mine.filter((p) => p.status === 'WAITING' || p.status === 'CALLED').length;
+      const served  = mine.filter((p) => p.status === 'COMPLETED').length;
+      const missed  = mine.filter((p) => p.status === 'MISSED').length;
+      $('mRegistered').textContent = mine.length;
+      $('mServed').textContent = served;
+      $('mWaiting').textContent = waiting;
+      $('mMissed').textContent = missed;
+      $('waitingBadge').textContent = waiting + ' Waiting';
+      const md = $('missedDot');
+      if (missed) { md.textContent = missed; md.classList.remove('hidden'); } else md.classList.add('hidden');
+      // next label (own patients only) — reflects the NEXT lock while CALLED
+      const locked = current && current.status === 'CALLED';
+      const next = mine.find((p) => p.status === 'WAITING');
+      $('nextLabel').textContent = locked
+        ? `🔒 আগে Serial ${current.serialNumber} শেষ করুন`
+        : next
+          ? `Next: Serial ${next.serialNumber} (${next.patientName})`
+          : 'No waiting patients';
+    }
+
+    function render() {
+      let list = patients.filter(matchesDoctor); // per-doctor mode sees only own patients
+      if (filter === 'waiting')   list = list.filter((p) => p.status === 'WAITING' || p.status === 'CALLED');
+      else if (filter === 'missed')    list = list.filter((p) => p.status === 'MISSED');
+      else if (filter === 'completed') list = list.filter((p) => p.status === 'COMPLETED');
+      // Default 'Calling' view: finished patients live on the Done tab only —
+      // otherwise their dead "Done" label looks like a broken button.
+      else if (filter === 'all') list = list.filter((p) => p.status !== 'COMPLETED');
+
+      $('empty').style.display = list.length ? 'none' : 'block';
+      $('queue').innerHTML = list.map((p) => `
+        <li class="flex items-center justify-between p-3 rounded-xl bg-surface-container-lowest shadow-sm gap-2">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="flex flex-col items-center justify-center w-12 h-12 rounded-lg ${p.status === 'CALLED' ? 'bg-primary-container text-on-primary' : 'bg-surface-container text-on-surface'} shrink-0">
+              <span class="text-[10px] ${p.status === 'CALLED' ? 'text-primary-fixed-dim' : 'text-on-surface-variant'} uppercase">SL</span>
+              <span class="font-mono text-lg font-bold ${p.status === 'CALLED' ? 'text-secondary-fixed' : ''}">${esc(p.serialNumber)}</span>
+            </div>
+            <div class="flex flex-col min-w-0">
+              <span class="text-sm text-on-surface font-bold truncate">${esc(p.patientName)}</span>
+              <span class="text-[12px] text-on-surface-variant truncate">${esc(p.doctorName)} • Room ${roomOf(p)}</span>
+              <span class="text-[11px] font-bold px-1.5 py-0.5 rounded self-start mt-0.5 ${statusStyle[p.status] || ''}">${esc(p.status)}${p.callCount > 1 ? ' ×' + p.callCount : ''}</span>
+            </div>
+          </div>
+          <div class="flex gap-1.5 shrink-0">
+            ${p.status === 'MISSED'
+              ? `<button onclick="call('${p.id}','call-again')" class="px-3 py-2 rounded-lg bg-secondary text-on-secondary text-sm font-bold">CALL AGAIN</button>`
+              : p.status === 'COMPLETED'
+                ? `<span class="px-3 py-2 text-outline text-sm font-bold">Done</span>`
+                : `<button onclick="call('${p.id}','call')" class="px-3 py-2 rounded-lg bg-secondary text-on-secondary text-sm font-bold flex items-center gap-1"><span class="mso text-[16px]">play_arrow</span>Call</button>
+                   <button onclick="call('${p.id}','missed')" class="px-2.5 py-2 rounded-lg bg-surface-container text-sm font-bold"><span class="mso text-[16px]">person_off</span></button>`}
+          </div>
+        </li>`).join('');
+    }
+
+    function setCurrent(p) {
+      current = p;
+      $('curSerial').textContent = p.serialNumber;
+      $('curName').textContent = p.patientName;
+      $('curNameBn').textContent = p.patientNameBn || '';
+      $('curDoctor').textContent = p.doctorName + (p.doctorSpecialty ? ' • ' + p.doctorSpecialty : '');
+      $('curChamberTag').textContent = 'Room ' + roomOf(p);
+      $('curStatusTag').innerHTML = `<span class="px-2.5 py-1 rounded-lg bg-secondary/20 text-secondary-fixed text-[11px] font-bold uppercase">${esc(p.status)}${p.callCount > 1 ? ' ×' + p.callCount : ''}</span>`;
+      // update header doctor context (only in all-doctors mode)
+      if (!DOCTOR_FILTER) {
+        $('hdrDoctor').textContent = p.doctorName;
+        $('hdrChamber').textContent = 'Room ' + roomOf(p);
+      }
+      updateActionButtons();
+      const hero = $('heroCard'); hero.classList.add('scale-[1.01]'); setTimeout(() => hero.classList.remove('scale-[1.01]'), 250);
+    }
+
+    /* ---------- STATE MACHINE: what each button is allowed to do ----------
+       IDLE   : CALL allowed, RECALL/MISSED/DONE dead, NEXT allowed
+       CALLED : RECALL/MISSED/DONE allowed, NEXT dead (finish this patient first!)
+       MISSED : DONE allowed (re-call via CALL AGAIN in the list), NEXT allowed
+       after DONE/MISSED the NEXT button unlocks — exactly the workflow requested. */
+    function updateActionButtons() {
+      const st = current ? current.status : null;
+      const canRecall = st === 'CALLED' || st === 'MISSED';
+      const canMissed = st === 'CALLED';
+      const canDone   = st === 'CALLED' || st === 'MISSED';
+      const nextAlive = !current || current.status !== 'CALLED'; // NEXT locked while a call is open
+      $('btnRecall').disabled = !canRecall;
+      $('btnMissed').disabled = !canMissed;
+      $('btnDone').disabled   = !canDone;
+      $('btnRecall').classList.toggle('btn-dead', !canRecall);
+      $('btnMissed').classList.toggle('btn-dead', !canMissed);
+      $('btnDone').classList.toggle('btn-dead', !canDone);
+      const bn = $('btnNext');
+      bn.classList.toggle('btn-dead', !nextAlive);
+      bn.setAttribute('aria-disabled', String(!nextAlive));
+      // hero hint line
+      const hint = $('heroHint');
+      if (!current)       hint.textContent = 'নিচের লিস্ট থেকে রোগী CALL করুন বা NEXT চাপুন';
+      else if (st === 'CALLED') hint.textContent = `Serial ${current.serialNumber} চলছে — RECALL / MISSED / DONE চাপুন (NEXT লক আছে)`;
+      else if (st === 'MISSED') hint.textContent = `Serial ${current.serialNumber} MISSED — RECALL চাপলে আবার ডাকা হবে, অথবা DONE/NEXT`;
+      else                hint.textContent = `Serial ${current.serialNumber} ${st} — NEXT চাপুন`;
+      renderMetrics(); // next label must reflect the lock too
+    }
+
+    /* Click feedback that ALWAYS works (independent of Tailwind timing) */
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.disabled) return;
+      b.classList.add('pressed');
+      setTimeout(() => b.classList.remove('pressed'), 180);
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
+    }, true);
+
+    /* ---------- Actions ---------- */
+    async function call(id, act) {
+      const verb = { call:'🔊 ডাক হচ্ছে', recall:'🔁 আবার ডাক হচ্ছে', 'call-again':'🔊 আবার ডাক হচ্ছে', missed:'🚫 MISSED করা হলো', complete:'✅ DONE — রুম ভিজিট শেষ' }[act] || 'Updated';
+      const res = await fetch(`${API}/patients/${id}/${act}`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // server rejected (e.g. NEXT-while-CALLED, duplicate) — explain clearly
+        showToast(body.message || 'কাজ হয়নি — আবার চেষ্টা করুন', 'err');
+        await load();
+        return;
+      }
+      if (body.data) {
+        setCurrent(body.data);
+        showToast(`${verb} — Serial ${body.data.serialNumber} (${body.data.patientName})`, act === 'missed' ? 'warn' : 'ok');
+      }
+      await load();
+      // Re-render the hero from the freshly loaded list so the room shows the
+      // floor-combined number (Room 103) — the action response has no floor.
+      if (body.data) {
+        const fresh = patients.find((x) => x.id === body.data.id);
+        if (fresh) setCurrent(fresh);
+      }
+    }
+
+    function callNext() {
+      // HARD STATE RULE: while a call is open (CALLED), NEXT stays locked.
+      if (current && current.status === 'CALLED') {
+        return showToast(`⚠ Serial ${current.serialNumber} এখনো শেষ হয়নি — আগে DONE বা MISSED চাপুন`, 'warn');
+      }
+      // Doctor on break: no new calls until the break ends (server enforces too).
+      if (myBreak) return showToast(`⚠ ${myBreak.labelBn || 'ব্রেক'} চলছে — আগে ব্রেক শেষ করুন`, 'warn');
+      const next = patients.filter(matchesDoctor).find((p) => p.status === 'WAITING'); // own patients first
+      if (!next) return showToast('অপেক্ষমাণ কোনো রোগী নেই', 'info');
+      call(next.id, 'call');
+    }
+
+    function action(a) {
+      if (!current) return showToast('আগে কোনো রোগী CALL করুন', 'warn');
+      const st = current.status;
+      const allowed = { recall: st === 'CALLED' || st === 'MISSED', missed: st === 'CALLED', complete: st === 'CALLED' || st === 'MISSED' };
+      if (!allowed[a]) {
+        const why = { recall: 'শুধু CALLED বা MISSED রোগী RECALL হয়', missed: 'শুধু CALLED রোগী MISSED হয়', complete: 'এই রোগীর জন্য DONE সম্ভব নয়' }[a];
+        return showToast('⚠ ' + why, 'warn');
+      }
+      call(current.id, a);
+    }
+
+    /* ---------- Add patient modal (scroll-locked, doctor-locked) ---------- */
+    function openAddModal() {
+      $('addModal').classList.remove('hidden'); $('addModal').classList.add('flex');
+      document.body.classList.add('modal-open');   // freeze background scroll
+      prefillSerial();
+      if (!DOCTOR_FILTER) {                        // all-doctors panel: sync chamber on pick
+        const sel = $('docSelect');
+        if (sel && sel.value) syncChamber(sel.value);
+      }
+    }
+    function closeAddModal() {
+      $('addModal').classList.add('hidden'); $('addModal').classList.remove('flex');
+      document.body.classList.remove('modal-open');
+    }
+    // chamber ALWAYS follows the chosen doctor — no cross-chamber serials
+    function syncChamber(name) {
+      const d = doctors.find((x) => x.name === name);
+      if (d) { $('aChamber').value = roomNo(d); $('docMeta').textContent = `${d.qualification || ''} • রুম ${roomNo(d)} • ফ্লোর ${d.floor || '—'}`; }
+      else   { $('aChamber').value = ''; }
+    }
+    // SIMPLE SERIAL: field stays empty = server assigns the next number.
+    // We just show a hint of what it will be (max+1 of today's own patients).
+    function prefillSerial() {
+      const docName = DOCTOR_FILTER || ($('docSelect') && $('docSelect').value);
+      const own = patients.filter((p) => String(p.doctorName || '').toLowerCase() === String(docName || '').toLowerCase());
+      const max = own.reduce((m, p) => Math.max(m, Number(p.serialNumber) || 0), 0);
+      $('aSerial').value = '';               // empty -> server auto-assigns
+      $('aSerial').placeholder = 'অটো: ' + (max + 1);
+    }
+
+    /* ---- Name auto-conversion in Add-Patient modal ---- */
+    const aNameEn = $('aNameEn');
+    const aNameBn = $('aNameBn');
+    let aTranslitTimer = null;
+    if (aNameEn && aNameBn && window.translit) {
+      let lastEdit = null;
+      aNameEn.addEventListener('input', () => {
+        lastEdit = 'en';
+        const v = aNameEn.value.trim();
+        const hint = $('aNameHint');
+        if (!v) { hint.classList.add('hidden'); return; }
+        if (window.translit.detectScript(v) === 'en') {
+          const bn = window.translit.toBangla(v); // instant local guess
+          if (bn) { aNameBn.value = bn; hint.textContent = 'বাংলা অটো: ' + bn; hint.classList.remove('hidden'); }
+          clearTimeout(aTranslitTimer);
+          aTranslitTimer = setTimeout(async () => {
+            try {
+              const r = await (await fetch(API + '/translit?text=' + encodeURIComponent(v))).json();
+              if (r && r.bangla && lastEdit === 'en' && aNameEn.value.trim() === v) {
+                aNameBn.value = r.bangla; hint.textContent = 'বাংলা অটো: ' + r.bangla; hint.classList.remove('hidden');
+              }
+            } catch (e) {}
+          }, 350);
+        } else {
+          const en = window.translit.toEnglish(v);
+          if (en) { hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
+        }
+      });
+      aNameBn.addEventListener('input', () => {
+        lastEdit = 'bn';
+        const v = aNameBn.value.trim();
+        const hint = $('aNameHint');
+        if (!v) { if (lastEdit === 'bn') hint.classList.add('hidden'); return; }
+        if (window.translit.detectScript(v) === 'bn') {
+          const en = window.translit.toEnglish(v);
+          if (en) { aNameEn.value = en; hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
+        }
+      });
+    }
+
+    $('addForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      // disabled <select> values are excluded from FormData — read the select directly
+      const doctorName = fd.get('doctorName') || ($('docSelect') && $('docSelect').value);
+      const payload = {
+        patientName: fd.get('patientName'),
+        patientNameBn: fd.get('patientNameBn') || '',
+        // SIMPLE SERIAL: empty field -> server assigns the next free number
+        serialNumber: fd.get('serialNumber') ? Number(fd.get('serialNumber')) : 0,
+        doctorName,
+        chamberNumber: fd.get('chamberNumber'),
+      };
+      const res = await fetch(API + '/patients', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (res.status === 201) {
+        const p = await res.json();
+        showToast(`✅ যোগ হলো Serial ${p.serialNumber} — ${p.patientName} (রুম ${roomOf(p)})`, 'ok');
+        e.target.reset(); $('docMeta').textContent = '';
+        const ah = $('aNameHint'); if (ah) ah.classList.add('hidden');
+        closeAddModal();
+        load();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast('⚠ ' + (err.message || 'রোগী যোগ করা যায়নি'), 'err');
+      }
+    });
+
+    /* ---------- Keypad ---------- */
+    function openSerialModal() { $('keypadModal').classList.remove('hidden'); $('keypadModal').classList.add('flex'); $('serialInput').value=''; $('serialHint').textContent=''; }
+    function closeSerialModal() { $('keypadModal').classList.add('hidden'); $('keypadModal').classList.remove('flex'); }
+    function kp(n) {
+      $('serialInput').value += n;
+      const p = patients.filter(matchesDoctor).find((x) => String(x.serialNumber) === $('serialInput').value && x.status !== 'COMPLETED');
+      $('serialHint').textContent = p ? `${p.patientName} • ${p.doctorName}` : 'No matching waiting patient';
+    }
+    function kpClear() { $('serialInput').value=''; $('serialHint').textContent=''; }
+    function submitKeypad() {
+      const val = $('serialInput').value;
+      if (!val) return;
+      const p = patients.filter(matchesDoctor).find((x) => String(x.serialNumber) === val && x.status !== 'COMPLETED');
+      if (!p) return showToast('No waiting patient with serial ' + val);
+      call(p.id, p.status === 'MISSED' ? 'call-again' : 'call');
+      closeSerialModal();
+    }
+
+    /* ---------- Bottom nav filter ---------- */
+    function setFilter(f) {
+      filter = f;
+      document.querySelectorAll('.nav-btn').forEach((b) => {
+        b.classList.toggle('text-secondary', b.dataset.nav === f);
+        b.classList.toggle('text-on-surface-variant', b.dataset.nav !== f);
+      });
+      render();
+    }
+
+    /* ---------- Doctor breaks (per-room assistant) ---------- */
+    let myBreak = null;
+    const breakIconFor = (t) => (t === 'lunch' ? 'restaurant' : t === 'namaz' ? 'mosque' : t === 'report' ? 'clinical_notes' : 'coffee');
+    function myDoctorId() {
+      if (!DOCTOR_FILTER) return null; // break control lives on the room panel
+      const d = doctors.find((x) => x.name === DOCTOR_FILTER);
+      return d ? d.id : null;
+    }
+    function renderBreak() {
+      const bar = $('breakBar'), btn = $('btnBreak'), picker = $('breakPicker');
+      if (!bar || !btn) return;
+      if (myBreak) {
+        bar.classList.remove('hidden'); bar.classList.add('flex');
+        btn.classList.add('hidden'); btn.classList.remove('flex');
+        picker.classList.add('hidden'); picker.classList.remove('grid');
+        $('breakIcon').textContent = breakIconFor(myBreak.type);
+        $('breakLabel').textContent = myBreak.type === 'report' ? (myBreak.labelBn || 'রিপোর্ট দেখছেন') : (myBreak.labelBn || 'ব্রেক') + ' চলছে';
+      } else {
+        bar.classList.add('hidden'); bar.classList.remove('flex');
+        picker.classList.add('hidden'); picker.classList.remove('grid');
+        if (DOCTOR_FILTER) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
+      }
+    }
+    function toggleBreakPicker(open) {
+      const p = $('breakPicker');
+      p.classList.toggle('hidden', !open);
+      p.classList.toggle('grid', open);
+      $('btnBreak').classList.toggle('hidden', open);
+      $('btnBreak').classList.toggle('flex', !open);
+    }
+    async function startBreak(type) {
+      const id = myDoctorId();
+      if (!id) return showToast('ডাক্তার শনাক্ত হয়নি', 'err');
+      const res = await fetch(`${API}/doctors/${id}/break`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast('⚠ ' + (body.message || 'ব্রেক শুরু হয়নি'), 'err');
+      toggleBreakPicker(false);
+      showToast('☕ ' + (body.message || 'ব্রেক শুরু'), 'warn');
+      await loadBreak();
+    }
+    async function endBreak() {
+      const id = myDoctorId();
+      if (!id) return showToast('ডাক্তার শনাক্ত হয়নি', 'err');
+      const res = await fetch(`${API}/doctors/${id}/break`, { method: 'DELETE' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast('⚠ ' + (body.message || 'সম্ভব হয়নি'), 'err');
+      showToast('▶ ' + (body.message || 'ব্রেক শেষ'), 'ok');
+      await loadBreak();
+    }
+    async function loadBreak() {
+      try {
+        const list = await (await fetch(`${API}/breaks`)).json();
+        myBreak = (Array.isArray(list) ? list : []).find((b) => DOCTOR_FILTER && b.doctorName === DOCTOR_FILTER) || null;
+        renderBreak();
+      } catch (_) {}
+    }
+    socket.on('break.started', (b) => { if (!DOCTOR_FILTER || b.doctorName === DOCTOR_FILTER) { myBreak = b; renderBreak(); if (DOCTOR_FILTER) showToast('☕ ' + (b.labelBn || 'ব্রেক') + ' শুরু হলো — নতুন কল ব্লকড', 'warn'); } });
+    socket.on('break.ended', (b) => { if (!DOCTOR_FILTER || b.doctorName === DOCTOR_FILTER) { myBreak = null; renderBreak(); } });
+
+    /* ---------- Reset only this doctor's day ---------- */
+    async function resetMine() {
+      const who = DOCTOR_FILTER || 'সব ডাক্তারের';
+      if (!confirm(who + ' — আজকের সব রোগী মুছে ফেলা হবে, সিরিয়াল ১ থেকে শুরু হবে। নিশ্চিত?')) return;
+      try {
+        const res = await fetch(API + '/patients/reset', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'today', doctor: DOCTOR_FILTER || undefined }),
+        });
+        const b = await res.json();
+        showToast(b.message || 'রিসেট হলো', 'ok');
+        load();
+      } catch (e) { showToast('রিসেট ব্যর্থ হলো', 'warn'); }
+    }
+
+    /* ---------- Live updates ---------- */
+    socket.on('patient.added', load);
+    socket.on('patient.updated', load);
+    socket.on('patient.called', (p) => { load(); });
+    socket.on('current.call', (p) => { if (matchesDoctor(p)) setCurrent(p); }); // per-doctor panel ignores other doctors' calls
+    socket.on('connect', () => $('conn').classList.remove('opacity-50'));
+    socket.on('disconnect', () => $('conn').classList.add('opacity-50'));
+
+    loadDoctors();
+    load();
+    loadBreak();
+    applyDoctorHeader();
+
+    /* ---------- PWA: install as an app on any device ---------- */
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW register failed', e));
+    }
+    let deferredPrompt = null;
+    const urlParams = new URLSearchParams(location.search);
+    const wantInstall = urlParams.get('install') === '1';
+    // "Add to Home Screen" only fires the NATIVE install dialog in a SECURE
+    // CONTEXT (https, or localhost). On the hospital LAN the panel is plain
+    // HTTP on e.g. http://192.168.1.104:5000 — so on Android we redirect the
+    // HOME button to the server's HTTPS listener (same app, port+1) via
+    // add-home.html, which walks through the one-time certificate step and
+    // then fires the real install dialog. localhost is already secure.
+    const isSecureCtx = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+    function goAddHome() {
+      const q = new URLSearchParams(location.search);
+      q.set('install', '1');
+      q.delete('fromHome');
+      location.href = '/add-home.html?' + q.toString();
+    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const b = $('installBtn');
+      if (b) { b.classList.remove('hidden'); b.classList.add('flex'); }
+      // Opened from Admin's "Add to Home" button → fire the install dialog at once.
+      if (wantInstall) window.installApp();
+    });
+    window.installApp = async function () {
+      if (!deferredPrompt) {
+        // Insecure LAN origin (http://PC-IP:5000): the native dialog can never
+        // fire here — bounce to the secure helper flow instead of a manual guide.
+        if (!isSecureCtx) { goAddHome(); return; }
+        // Secure but no prompt (iPhone/iPad Safari, or unsupported browser):
+        // show the step-by-step "Add to Home Screen" guide.
+        openInstallGuide();
+        return;
+      }
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      const b = $('installBtn');
+      if (b) { b.classList.add('hidden'); b.classList.remove('flex'); }
+    };
+    function openInstallGuide() {
+      const m = $('installGuide');
+      if (m) { m.classList.remove('hidden'); m.classList.add('flex'); document.body.classList.add('modal-open'); }
+    }
+    window.closeInstallGuide = function () {
+      const m = $('installGuide');
+      if (m) { m.classList.add('hidden'); m.classList.remove('flex'); document.body.classList.remove('modal-open'); }
+    };
+    window.addEventListener('appinstalled', () => {
+      const b = $('installBtn');
+      if (b) { b.classList.add('hidden'); b.classList.remove('flex'); }
+      showToast('✅ অ্যাপ ইনস্টল হয়েছে', 'ok');
+    });
+    // If opened via "Add to Home" but the browser gives no install prompt:
+    //   - insecure HTTP origin → the native dialog is IMPOSSIBLE here, jump to
+    //     the secure add-home helper (one-time cert step, then real dialog).
+    //   - iPhone/iPad Safari → show the visual guide modal (manual install).
+    if (wantInstall) setTimeout(() => {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (standalone) { showToast('এই অ্যাপটা ইতিমধ্যে ইনস্টল করা আছে ✓', 'ok'); return; }
+      if (!isSecureCtx) { goAddHome(); return; }
+      if (!deferredPrompt) openInstallGuide();
+    }, 1500);
+  </script>
+</body>
+</html>

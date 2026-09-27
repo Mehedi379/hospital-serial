@@ -1,0 +1,14 @@
+$kind: http-request
+method: GET
+url: '{{baseUrl}}/api/patients/:id'
+order: 4000
+pathVariables:
+  - key: id
+    value: 'non-existent-id-000'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Invalid patient returns 404', function () {
+        pm.response.to.have.status(404);
+      });

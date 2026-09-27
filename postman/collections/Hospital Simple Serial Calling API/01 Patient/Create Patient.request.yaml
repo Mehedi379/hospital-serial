@@ -1,0 +1,39 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/patients'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "patientName": "Md. Karim",
+      "serialNumber": 12,
+      "doctorName": "Dr. Oliur Rahman",
+      "chamberNumber": "03"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Status code is 201', function () {
+        pm.response.to.have.status(201);
+      });
+
+      pm.test('Response has patient id and WAITING status', function () {
+        var json = pm.response.json();
+        var patient = json.data || json;
+        pm.expect(patient).to.have.property('id');
+        pm.expect(patient).to.have.property('status');
+      });
+
+      // Save the created patient id for the next requests
+      try {
+        var body = pm.response.json();
+        var created = body.data || body;
+        if (created && created.id) {
+          pm.environment.set('patientId', String(created.id));
+        }
+      } catch (e) {}

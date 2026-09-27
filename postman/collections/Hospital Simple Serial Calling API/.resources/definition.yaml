@@ -1,0 +1,11 @@
+$kind: collection
+name: Hospital Simple Serial Calling API
+description: |-
+  Simple API for a Hospital Serial Calling System.
+
+  Flow: Staff adds a patient + serial -> Assistant sees the list -> Assistant calls a serial -> connected TV instantly shows the serial + patient name and plays a voice announcement. Missed patients can be called again later.
+
+  Base URL is configured via the `{{baseUrl}}` environment variable (default `http://localhost:5000`).
+variables:
+  - key: baseUrl
+    value: 'http://localhost:5000'

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Waiting Room TV — Clinic Queuing System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/webp" href="logo-512.webp" />
+  <script src="avatars.js"></script>
+  <script src="translit.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* ============================================================
+       FIT-TO-SCREEN CLINIC QUEUING BOARD
+       Clean light design: a white board centered on screen with three
+       panels (NOW SERVING / NEXT IN LINE / DATE-TIME) and a bottom bar.
+       Everything is keyed off viewport HEIGHT so it fills any TV and
+       never scrolls.
+       ============================================================ */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #efe6e6 0%, #d8cccc 100%);
+      padding: clamp(10px, 3vh, 44px);
+      color: #3a0a0d;
+    }
+    .mso { font-family: 'Material Symbols Outlined'; font-variation-settings: 'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; line-height: 1; }
+
+    :root {
+      --navy:       #c22832;
+      --box-border: #e6b6b6;
+      --box-hdr:    #3a0a0d;
+      --box-hdr-ink:#ffdad7;
+      --bar:        #3a0a0d;
+      --bar-ink:    #ffdad7;
+
+      --serial: clamp(90px, 28vh, 340px);
+      --title:  clamp(20px, 4.6vh, 56px);
+      --hdr:    clamp(17px, 3.1vh, 38px);
+      --next:   clamp(32px, 7.5vh, 96px);
+      --date:   clamp(15px, 2.7vh, 32px);
+      --bar-t:  clamp(18px, 3.3vh, 42px);
+      --gap:    clamp(10px, 1.8vh, 26px);
+      --pad:    clamp(10px, 2vh, 30px);
+      --radius: clamp(10px, 1.4vh, 16px);
+    }
+
+    #app {
+      height: 100%;
+      background: #ffffff;
+      border-radius: clamp(14px, 2vh, 28px);
+      box-shadow: 0 20px 60px -20px rgba(20,45,80,.55);
+      display: flex;
+      flex-direction: column;
+      padding: var(--pad);
+      gap: var(--gap);
+    }
+
+    #brandBar { text-align: center; flex-shrink: 0; }
+    #hdrHospital {
+      margin: 0; font-family: 'Poppins', sans-serif; font-weight: 800;
+      font-size: var(--title); color: #3a0a0d; letter-spacing: .04em;
+      text-transform: uppercase; line-height: 1.1;
+    }
+    #hdrSub { font-size: var(--hdr); color: #7d5555; margin-top: 4px; }
+
+    .board { flex: 1 1 auto; min-height: 0; display: flex; }
+    .boxes {
+      flex: 1; display: grid; grid-template-columns: 1.15fr 1fr .85fr;
+      gap: var(--gap); min-height: 0;
+    }
+    .box {
+      border: 1.5px solid var(--box-border); border-radius: var(--radius);
+      overflow: hidden; display: flex; flex-direction: column; background: #fff; min-height: 0;
+    }
+    .boxHdr {
+      background: var(--box-hdr); color: var(--box-hdr-ink); text-align: center;
+      font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--hdr);
+      letter-spacing: .08em; text-transform: uppercase;
+      padding: calc(var(--pad) * .5); border-bottom: 1.5px solid var(--box-border);
+    }
+    .boxBody { flex: 1; min-height: 0; padding: var(--pad); display: flex; }
+    .boxBody.center { align-items: center; justify-content: center; }
+    #serial {
+      font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--serial);
+      color: var(--navy); line-height: .9; text-align: center;
+    }
+    .nextList {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; gap: calc(var(--gap) * .25); line-height: 1;
+      font-family: 'Poppins', sans-serif; font-weight: 700; font-size: var(--next);
+      color: var(--navy); overflow: hidden; width: 100%; height: 100%;
+    }
+    .nextList > div { line-height: 1; }
+    .nextList .empty { opacity: .35; }
+    .dateBox .boxBody { flex-direction: column; align-items: center; justify-content: center; gap: var(--gap); }
+    .dtRow { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: var(--date); color: var(--navy); white-space: nowrap; }
+    .dtRow .mso { font-size: calc(var(--date) * 1.35); }
+    .dtIcon { width: calc(var(--date) * 1.35); height: calc(var(--date) * 1.35); color: var(--navy); flex-shrink: 0; }
+    .dtLabel { font-size: calc(var(--date) * .7); color: #5a6b7d; letter-spacing: .05em; text-transform: uppercase; }
+
+    #proceedBar {
+      flex-shrink: 0; background: var(--bar); color: var(--bar-ink); text-align: center;
+      border-radius: var(--radius); padding: calc(var(--pad) * .7);
+      font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--bar-t);
+      letter-spacing: .06em; text-transform: uppercase;
+    }
+
+    #breakStrip {
+      display: none; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+      background: #fffbeb; border: 1px solid #f59e0b; color: #92400e;
+      border-radius: 12px; padding: 8px 14px; font-weight: 700; flex-shrink: 0;
+      font-size: var(--hdr);
+    }
+    .breakBoard { flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+    #breakIcon { font-size: clamp(48px, 12vh, 150px); color: #f59e0b; }
+    #breakTitle { font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--title); color: #b45309; }
+    #breakTitleEn { font-weight: 700; font-size: var(--hdr); color: #5a6b7d; }
+    #breakNote { font-size: var(--date); color: #5a6b7d; text-align: center; }
+
+    #soundBadge {
+      position: fixed; right: 16px; bottom: 14px; display: inline-flex; align-items: center;
+      gap: 6px; font-size: 12px; background: #eef4f8; color: #5a6b7d; padding: 5px 12px;
+      border-radius: 999px; cursor: pointer; z-index: 50; font-weight: 700;
+      box-shadow: 0 2px 8px rgba(20,45,80,.15);
+    }
+    #soundBadge.bg-error { background: #ba1a1a; color: #fff; }
+
+    /* Portrait / phone: let it scroll naturally instead of squeezing */
+    @media (max-aspect-ratio: 3/4) {
+      body { overflow: auto; height: auto; }
+      #app { height: auto; min-height: calc(100dvh - 20px); }
+      .board { flex: none; }
+      .boxes { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="select-none">
+
+<div id="app">
+
+  <!-- =============== TITLE =============== -->
+  <div id="brandBar">
+    <h1 id="hdrHospital">Welcome to Our Clinic — Queuing System</h1>
+    <div id="hdrSub">Smart Patient Calling &amp; Voice Announcement • সিলেট গ্যাস্ট্রোলিভার হাসপাতাল</div>
+  </div>
+
+  <!-- =============== BOARD (three panels) =============== -->
+  <div id="callCard" class="board">
+    <div class="boxes">
+      <!-- NOW SERVING -->
+      <section class="box">
+        <div class="boxHdr">Now Serving</div>
+        <div class="boxBody center"><span id="serial">—</span></div>
+      </section>
+      <!-- NEXT IN LINE -->
+      <section class="box">
+        <div class="boxHdr">Next in Line</div>
+        <div class="boxBody"><div id="nextList" class="nextList"><span class="empty">—</span></div></div>
+      </section>
+      <!-- DATE / TIME -->
+      <section class="box dateBox">
+        <div class="boxBody">
+          <div class="dtRow">
+            <svg class="dtIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="today">—</span>
+          </div>
+          <div class="dtRow">
+            <svg class="dtIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+            <span id="clock">--:--</span>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- STANDBY placeholder (kept for script state; board stays visible with "—") -->
+  <div id="standby" style="display:none;"></div>
+
+  <!-- DOCTOR ON BREAK overlay -->
+  <div id="breakCard" class="board breakBoard" style="display:none;">
+    <span id="breakIcon" class="mso">restaurant</span>
+    <div id="breakTitle">ব্রেক চলছে</div>
+    <div id="breakTitleEn">Break in progress</div>
+    <div id="breakNote">ডাক্তার ফিরলেই পরের রোগী ডাকা হবে — অনুগ্রহ করে অপেক্ষা করুন</div>
+  </div>
+
+  <!-- =============== BOTTOM BAR =============== -->
+  <div id="proceedBar"><span id="proceedRoom">Please keep your serial slip ready</span></div>
+
+</div>
+
+<!-- audio-unlock badge (turns red if the browser blocks autoplay) -->
+<div id="soundBadge" onclick="unlockSound()" title="Sound status — tap if announcements are silent">
+  <span class="mso">campaign</span><span>Audio</span>
+</div>
+
+<script>
+  const socket = io({ query: (new URLSearchParams(location.search).get('doctor')) ? { doctor: new URLSearchParams(location.search).get('doctor') } : {} });
+  const $ = (id) => document.getElementById(id);
+
+  /* ---- Per-doctor mode: tv.html?doctor=Dr.+Name ---- */
+  const DOCTOR_FILTER = (new URLSearchParams(location.search).get('doctor') || '').trim();
+  const matchesDoctor = (p) => !DOCTOR_FILTER || String(p.doctorName || '').trim().toLowerCase() === DOCTOR_FILTER.toLowerCase();
+  let currentDoctor = null;
+  async function loadDoctorHeader() {
+    if (!DOCTOR_FILTER) return;
+    try {
+      const res = await fetch('/api/doctors');
+      const docs = await res.json();
+      const d = docs.find((x) => x.name.toLowerCase() === DOCTOR_FILTER.toLowerCase());
+      currentDoctor = d || null;
+      if (d) {
+        const rn = (parseInt(d.floor, 10) > 0 && parseInt(d.chamberNumber, 10) >= 0)
+          ? parseInt(d.floor, 10) * 100 + parseInt(d.chamberNumber, 10)
+          : (d.chamberNumber || '—');
+        $('hdrHospital').textContent = d.name + ' — Queuing System';
+        $('hdrSub').textContent = `Room ${rn}${d.floor ? ` • Floor ${d.floor}` : ''}${d.specialty ? ' • ' + d.specialty : ''}` +
+          (d.nameBn ? ' • ' + d.nameBn : '');
+      } else {
+        $('hdrSub').textContent = DOCTOR_FILTER;
+      }
+      document.title = 'Room TV — ' + (d ? d.name : DOCTOR_FILTER);
+    } catch (e) { console.error('doctor header load failed', e); }
+  }
+
+  // Escape user-supplied text before putting it in innerHTML (prevents XSS)
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  /* ---- Clock ---- */
+  function tick() {
+    const now = new Date();
+    $('clock').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    $('today').textContent = 'TODAY: ' + now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+  }
+  setInterval(tick, 1000); tick();
+  /* ================================================================
+     VOICE ANNOUNCEMENT — clear female voice, Bangla + English
+     ================================================================ */
+  let VOICES = [];
+  function loadVoices() {
+    if (!('speechSynthesis' in window)) return;
+    VOICES = window.speechSynthesis.getVoices() || [];
+  }
+  loadVoices();
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    setTimeout(loadVoices, 300); setTimeout(loadVoices, 1500);
+  }
+
+  const FEMALE_HINTS = [
+    'female', 'zira', 'susan', 'hazel', 'aria', 'jenny', 'sonia', 'libby',
+    'samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'serena',
+    'natasha', 'ananya', 'neerja', 'heera', 'bashkar', 'nabanita', 'priya',
+    'google bangla', 'google বাংলা', 'shruti', 'salli', 'joanna', 'eva',
+  ];
+  const MALE_HINTS = [
+    'male', 'david', 'mark', 'george', 'rishi', 'ravi', 'prabhat', 'male1',
+    'hemant', 'kalpana-m', 'guy', 'ryan', 'brian', 'james', 'john', 'tom',
+    'rashid', 'majed', 'shakir', 'bashkar-',
+  ];
+  const isFemaleVoice = (v) => FEMALE_HINTS.some((h) => (v.name || '').toLowerCase().includes(h));
+  const isMaleVoice = (v) => MALE_HINTS.some((h) => (v.name || '').toLowerCase().includes(h));
+
+  function pickVoice(langPrefix) {
+    const exact = VOICES.filter((v) => (v.lang || '').toLowerCase().replace('_', '-').startsWith(langPrefix));
+    const pool = exact.length ? exact : VOICES.filter((v) => (v.lang || '').toLowerCase().startsWith(langPrefix.slice(0, 2)));
+    if (!pool.length) return null;
+    const females = pool.filter((v) => isFemaleVoice(v) && !isMaleVoice(v));
+    const neutrals = pool.filter((v) => !isFemaleVoice(v) && !isMaleVoice(v));
+    const chosenPool = females.length ? females : (neutrals.length ? neutrals : pool);
+    const score = (v) => {
+      const n = (v.name || '').toLowerCase();
+      let s = 0;
+      if (v.localService) s += 1;
+      if (n.includes('google')) s += 2;
+      return s;
+    };
+    return chosenPool.slice().sort((a, b) => score(b) - score(a))[0];
+  }
+  // Soft two-tone chime with the Web Audio API.
+  function chime() {
+    try {
+      const ctx = chime._ctx || (chime._ctx = new (window.AudioContext || window.webkitAudioContext)());
+      if (ctx.state === 'suspended') {
+        try {
+          const b = ctx.createBuffer(1, 1, 22050);
+          const src = ctx.createBufferSource();
+          src.buffer = b; src.connect(ctx.destination); src.start(0);
+        } catch (e2) {}
+        ctx.resume().catch(() => {});
+      }
+      const t0 = ctx.currentTime;
+      [[880, 0], [1174.66, 0.12]].forEach(([freq, dt]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine'; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, t0 + dt);
+        gain.gain.exponentialRampToValueAtTime(0.12, t0 + dt + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.5);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(t0 + dt); osc.stop(t0 + dt + 0.55);
+      });
+    } catch (e) { /* audio blocked or unsupported — voice still works */ }
+  }
+
+  const BN_NUMS = ['শূন্য','এক','দুই','তিন','চার','পাঁচ','ছয়','সাত','আট','নয়','দশ','এগারো','বারো','তেরো','চৌদ্দ','পনেরো','ষোলো','সতেরো','আঠারো','উনিশ','বিশ','একুশ','বাইশ','তেইশ','চব্বিশ','পঁচিশ','ছাব্বিশ','সাতাশ','আটাশ','উনত্রিশ','ত্রিশ','একত্রিশ','বত্রিশ','তেত্রিশ','চৌত্রিশ','পঁয়ত্রিশ','ছত্রিশ','সাঁইত্রিশ','আটত্রিশ','উনচল্লিশ','চল্লিশ','একচল্লিশ','বিয়াল্লিশ','তেতাল্লিশ','চুয়াল্লিশ','পঁয়তাল্লিশ','ছেচল্লিশ','সাতচল্লিশ','আটচল্লিশ','উনপঞ্চাশ','পঞ্চাশ','একান্ন','বায়ান্ন','তিপ্পান্ন','চুয়ান্ন','পঞ্চান্ন','ছাপ্পান্ন','সাতান্ন','আটান্ন','উনষাট','ষাট','একষট্টি','বাষট্টি','তেষট্টি','চৌষট্টি','পঁয়ষট্টি','ছেষট্টি','সাতষট্টি','আটষট্টি','উনসত্তর','সত্তর','একাত্তর','বাহাত্তর','তিয়াত্তর','চুয়াত্তর','পঁচাত্তর','ছিয়াত্তর','সাতাত্তর','আটাত্তর','উনআশি','আশি','একাশি','বিরাশি','তিরাশি','চুরাশি','পঁচাশি','ছিয়াশি','সাতাশি','আটাশি','উননব্বই','নব্বই','একানব্বই','বিরানব্বই','তিরানব্বই','চুরানব্বই','পঁচানব্বই','ছিয়ানব্বই','সাতানব্বই','আটানব্বই','নিরানব্বই'];
+  const ROM_NUMS = ['shunno','ek','dui','tin','char','pach','choy','shat','at','noy','dash','egaro','baro','tero','choddho','ponero','sholo','shotero','atharo','unish','bish','ekush','baish','teish','chobbish','pachish','chabbish','shatash','atash','untrish','trish','ektrish','botrish','tetrish','chotrish','paytrish','chottrish','shaintrish','attrish','unchollish','chollish','ekchollish','biyallish','tetallish','chuyallish','paytallish','chechollish','satchollish','atchollish','unponchash','ponchash','ekanno','bayanno','tippanno','chuyanno','pachanno','chappanno','shatanno','atanno','unshat','shat','ekshotri','bashotri','teshotri','chushotri','payshotri','cheshotri','satshotri','atshotri','unsottor','sottor','ekattor','bahattor','tiyattor','chuyattor','pachattor','chiyattor','shatattor','atattor','unashi','ashi','ekashi','birashi','tirashi','churashi','pachashi','chiyashi','shatashi','atashi','unnobboi','nobboi','ekannobboi','birannobboi','tirannobboi','churannobboi','pachannobboi','chiyannobboi','shatannobboi','atannobboi','nirannobboi'];
+  function numWords(n, table) {
+    n = parseInt(n, 10);
+    if (isNaN(n) || n < 0) return String(n);
+    if (n < 100) return table[n];
+    const h = Math.floor(n / 100), r = n % 100;
+    const hundreds = table === BN_NUMS
+      ? (h === 1 ? 'একশো' : (BN_NUMS[h] || h) + 'শো')
+      : (h === 1 ? 'eksho' : (ROM_NUMS[h] || h) + 'sho');
+    return hundreds + (r ? ' ' + table[r] : '');
+  }
+  function romanize(s) {
+    let r = (window.translit && window.translit.detectScript(s) === 'bn')
+      ? (window.translit.toEnglish(s) || s) : s;
+    return r.replace(/\bMd\.?/gi, 'Mohammad').replace(/\bMst\.?/gi, 'Mosa');
+  }
+
+  function utter(text, voice, lang, opts) {
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.lang = lang;
+    const o = opts || {};
+    u.rate = o.rate || 0.85;
+    u.pitch = o.pitch !== undefined ? o.pitch : (voice && isFemaleVoice(voice) ? 1.0 : 1.25);
+    u.volume = 1;
+    return u;
+  }
+
+  function roomNumber(p) {
+    const ch = parseInt(p.chamberNumber, 10);
+    const fl = parseInt(p.floor, 10);
+    if (!isNaN(fl) && fl > 0 && !isNaN(ch)) return fl * 100 + ch;
+    return isNaN(ch) ? p.chamberNumber : ch;
+  }
+
+  function speakBangla(p) {
+    const vBn = pickVoice('bn');
+    const vEn = pickVoice('en');
+    const room = roomNumber(p);
+    const bnFallback = !vBn || !vBn.lang.toLowerCase().startsWith('bn');
+    if (bnFallback) {
+      const sr = numWords(p.serialNumber, ROM_NUMS);
+      const text = `Serial number ${sr}, ekhon ${numWords(room, ROM_NUMS)} number room e chole ashun.`;
+      const v = vEn || vBn;
+      window.speechSynthesis.speak(utter(text, v, v ? v.lang : 'en-US', { rate: 0.8, pitch: 1.1 }));
+    } else {
+      const text = `সিরিয়াল নম্বর ${numWords(p.serialNumber, BN_NUMS)}, ` +
+        `এখন ${numWords(room, BN_NUMS)} নম্বর রুমে চলে আসুন।`;
+      window.speechSynthesis.speak(utter(text, vBn, vBn.lang, { rate: 0.85, pitch: isFemaleVoice(vBn) ? 1.0 : 1.25 }));
+    }
+  }
+  const ttsAudio = new Audio();
+  ttsAudio.preload = 'auto';
+  ttsAudio.volume = 1;
+  ttsAudio.muted = true;
+  function playRemoteBangla(text) {
+    return new Promise((resolve, reject) => {
+      try {
+        ttsAudio.src = '/api/tts?lang=bn&v=' + Date.now() + '&text=' + encodeURIComponent(text);
+        const to = setTimeout(() => reject(new Error('tts timeout')), 8000);
+        ttsAudio.onplaying = () => {
+          clearTimeout(to);
+          try { ttsAudio.muted = false; } catch (e2) {}
+          if (typeof markSoundOk === 'function') markSoundOk();
+        };
+        ttsAudio.onended = () => resolve();
+        ttsAudio.onerror = () => { clearTimeout(to); reject(new Error('tts error')); };
+        const pr = ttsAudio.play();
+        if (pr && pr.catch) pr.catch((e) => { clearTimeout(to); markSoundBlocked(); reject(e); });
+      } catch (e) { reject(e); }
+    });
+  }
+
+  // Pronunciation overrides: numbers whose standard word Google TTS mis-reads
+  // (the 70s "-ত্তর" conjunct comes out garbled) get a clearer phonetic spelling.
+  const SPEAK_FIX = {
+    70: 'সত্তোর', 71: 'একাত্তোর', 72: 'বাহাত্তোর', 73: 'তিয়াত্তোর', 74: 'চুয়াত্তোর',
+    75: 'পঁচাত্তোর', 76: 'ছিয়াত্তোর', 77: 'সাতাত্তোর', 78: 'আটাত্তোর', 79: 'উনো আশি',
+  };
+  function bnSpeak(n) {
+    const k = parseInt(n, 10);
+    return SPEAK_FIX[k] || numWords(k, BN_NUMS);
+  }
+  function announceText(p) {
+    const room = roomNumber(p);
+    // Word-based (not numerals): we control every word, so 20 is "বিশ" not the
+    // dialectal "কুড়ি" Google TTS uses for the numeral ২০.
+    const s = bnSpeak(p.serialNumber);
+    const r = bnSpeak(room);
+    return `সিরিয়াল নম্বর ${s}, এখন ${r} নম্বর রুমে চলে আসুন।`;
+  }
+
+  function speak(p) {
+    if (announcing) {
+      if (announceQueue.length < 2) announceQueue.push({ text: announceText(p), fallback: () => speakBangla(p) });
+      return;
+    }
+    doSpeakText(announceText(p), () => speakBangla(p));
+  }
+  let announceQueue = [];
+  let announcing = false;
+  function doSpeakText(text, fallback) {
+    announcing = true;
+    try { if (ttsAudio) { ttsAudio.pause(); ttsAudio.currentTime = 0; } } catch (e) {}
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    chime();
+    setTimeout(() => {
+      playRemoteBangla(text)
+        .catch(() => { if (fallback) fallback(); })
+        .finally(() => {
+          announcing = false;
+          const next = announceQueue.shift();
+          if (next) doSpeakText(next.text, next.fallback);
+        });
+    }, 700);
+  }
+
+  /* ---- Auto-unlock audio (autoplay policy) ---- */
+  let audioReady = false;
+  function primeAudio() {
+    if (audioReady || announcing) return;
+    try { if (chime._ctx && chime._ctx.state === 'suspended') chime._ctx.resume(); } catch (e) {}
+    try { if ('speechSynthesis' in window) window.speechSynthesis.resume(); } catch (e) {}
+    try {
+      ttsAudio.muted = true;
+      ttsAudio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+      const pr = ttsAudio.play();
+      if (pr && pr.then) pr.then(() => {
+        audioReady = true;
+        try { ttsAudio.pause(); ttsAudio.currentTime = 0; } catch (e) {}
+        ttsAudio.muted = false;
+        if (typeof markSoundOk === 'function') markSoundOk();
+      }).catch(() => { ttsAudio.muted = false; });
+    } catch (e) { ttsAudio.muted = false; }
+  }
+  function enableSound() { primeAudio(); }
+  function markSoundBlocked() {
+    const b = $('soundBadge');
+    if (!b || b.dataset.blocked === '1') return;
+    b.dataset.blocked = '1';
+    b.classList.add('bg-error');
+    b.innerHTML = '<span class="mso">volume_off</span><span>সাউন্ড বন্ধ — ট্যাপ করুন</span>';
+  }
+  function markSoundOk() {
+    const b = $('soundBadge');
+    if (!b) return;
+    b.dataset.blocked = '';
+    b.classList.remove('bg-error');
+    b.innerHTML = '<span class="mso">campaign</span><span>Audio</span>';
+  }
+  function unlockSound() { primeAudio(); }
+  window.addEventListener('load', () => { primeAudio(); setTimeout(primeAudio, 1500); setTimeout(() => { if (!audioReady) markSoundBlocked(); }, 3000); });
+  ['click', 'touchstart', 'pointerdown', 'keydown'].forEach((ev) =>
+    window.addEventListener(ev, primeAudio, { passive: true }));
+
+  function testVoice() {
+    const sample = { serialNumber: 55, chamberNumber: '08', floor: '2' };
+    if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); try { window.speechSynthesis.resume(); } catch (e) {} }
+    chime();
+    setTimeout(() => {
+      playRemoteBangla(announceText(sample)).catch(() => speakBangla(sample));
+    }, 700);
+  }
+  /* ---- Auto-fit: scale the big numbers to fill their box on ANY screen ----
+     A hospital TV can be 32" or 65", and browser zoom / OS display scaling
+     changes the CSS pixel size of the boxes. Instead of measuring scrollHeight
+     (which a centered flex container reports unreliably across browsers and was
+     collapsing the NEXT numbers to a tiny size at 100% zoom), we COMPUTE the
+     font size purely from the box's clientWidth/clientHeight. This is
+     deterministic: same box size always yields the same number size. */
+  function _fitCalc(el, opts) {
+    if (!el) return;
+    const box = el.parentElement;
+    if (!box || !box.clientHeight || !box.clientWidth) return;
+    const cs = getComputedStyle(box);
+    const W = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const H = box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (W <= 0 || H <= 0) return;
+    // Height budget (in em): rows * lineHeight + gaps between rows.
+    const denomH = opts.rows * opts.lineH + Math.max(0, opts.rows - 1) * opts.gapF;
+    const byH = H / denomH;
+    // Width budget: widest content = maxChars glyphs, each ~charW em wide.
+    const byW = W / (Math.max(1, opts.maxChars) * opts.charW);
+    let f = Math.min(byH, byW);
+    f = Math.max(opts.min, Math.min(opts.max, f));
+    el.style.fontSize = Math.floor(f) + 'px';
+  }
+  function fitAll() {
+    const s = $('serial');
+    if (s) {
+      const txt = (s.textContent || '').trim() || '0';
+      // NOW SERVING: one big number filling the box height (width-capped for
+      // multi-digit / prefixed serials like "C217").
+      _fitCalc(s, { rows: 1, lineH: 1.0, gapF: 0, maxChars: txt.length, charW: 0.62, min: 20, max: 900 });
+    }
+    const n = $('nextList');
+    if (n) {
+      // Longest serial currently shown (default 3 digits) governs width.
+      let maxChars = 3;
+      n.querySelectorAll('div').forEach((d) => { maxChars = Math.max(maxChars, (d.textContent || '').trim().length); });
+      // Sized as if the box always holds 4 rows, so numbers stay a consistent,
+      // large size whether 1 or 4 are waiting.
+      _fitCalc(n, { rows: 4, lineH: 1.05, gapF: 0.25, maxChars, charW: 0.62, min: 20, max: 460 });
+    }
+  }
+  // Fit across several ticks so it can't get stuck at a stale (tiny) size if it
+  // runs before layout/fonts settle — a common cause of small numbers at 100% zoom.
+  function scheduleFit() {
+    requestAnimationFrame(() => requestAnimationFrame(fitAll));
+    setTimeout(fitAll, 150);
+    setTimeout(fitAll, 600);
+  }
+  window.addEventListener('resize', () => requestAnimationFrame(fitAll));
+  window.addEventListener('load', () => { scheduleFit(); setTimeout(fitAll, 1500); });
+  // Re-fit once web fonts are ready (Poppins changes glyph metrics).
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(fitAll));
+  // Re-fit whenever a box actually gets/changes its size (covers late layout,
+  // font loading, break-card swaps and socket updates) so numbers never stay tiny.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => requestAnimationFrame(fitAll));
+    ['serial', 'nextList'].forEach((id) => {
+      const box = $(id) && $(id).parentElement;
+      if (box) ro.observe(box);
+    });
+  }
+  // Re-fit whenever the serial or the queue text changes, independent of which
+  // code path changed it — the number is always sized to its final content.
+  if (window.MutationObserver) {
+    const mo = new MutationObserver(() => requestAnimationFrame(fitAll));
+    ['serial', 'nextList'].forEach((id) => {
+      const el = $(id);
+      if (el) mo.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+  }
+
+  /* ---- Render active call (NOW SERVING + room bar) ---- */
+  function render(p) {
+    if (!matchesDoctor(p)) return; // per-doctor TV ignores other doctors' calls
+    hideBreak();
+    if ($('standby')) $('standby').style.display = 'none';
+    $('serial').textContent = p.serialNumber;
+    const room = roomNumber(p);
+    $('proceedRoom').textContent = 'Please proceed to Room ' + room;
+    loadQueue();
+    scheduleFit();
+  }
+
+  /* ---- Waiting queue → NEXT IN LINE list ---- */
+  let lastNextHtml = null;
+  async function loadQueue() {
+    try {
+      const url = '/api/patients' + (DOCTOR_FILTER ? '?doctor=' + encodeURIComponent(DOCTOR_FILTER) : '');
+      const res = await fetch(url);
+      const json = await res.json();
+      const list = (json.data || json.patients || json || []);
+      const waiting = list.filter((p) => p.status === 'WAITING');
+      const next = waiting.slice(0, 4);
+      const html = next.length
+        ? next.map((p) => `<div>${esc(p.serialNumber)}</div>`).join('')
+        : '<span class="empty">—</span>';
+      if (html !== lastNextHtml) { $('nextList').innerHTML = html; lastNextHtml = html; scheduleFit(); }
+    } catch (e) {
+      console.error('Queue load failed:', e);
+    }
+  }
+
+  /* ---- Socket events ---- */
+  socket.on('patient.called', (p) => { if (matchesDoctor(p)) { hideBreak(); render(p); speak(p); } loadQueue(); });
+  socket.on('current.call', (p) => { render(p); loadQueue(); }); // restore on connect, no voice
+  socket.on('patient.updated', loadQueue);
+  socket.on('patient.added', loadQueue);
+  socket.on('connect', () => { console.log('TV connected' + (DOCTOR_FILTER ? ' (doctor: ' + DOCTOR_FILTER + ')' : '')); primeAudio(); loadQueue(); });
+
+  /* ---- Doctor breaks (lunch / namaz / other) ---- */
+  let currentBreak = null;
+  let allBreaks = [];
+  const breakIconFor = (t) => (t === 'lunch' ? 'restaurant' : t === 'namaz' ? 'mosque' : t === 'report' ? 'clinical_notes' : 'coffee');
+  function showBreak(b) {
+    currentBreak = b;
+    $('callCard').style.display = 'none';
+    if ($('standby')) $('standby').style.display = 'none';
+    $('breakCard').style.display = 'flex';
+    $('breakIcon').textContent = breakIconFor(b.type);
+    $('breakIcon').style.color = b.type === 'report' ? '#2563eb' : '#f59e0b';
+    if (b.type === 'report') {
+      $('breakTitle').textContent = (b.labelBn || 'রিপোর্ট দেখছেন');
+      $('breakTitle').style.color = '#1d4ed8';
+      $('breakTitleEn').textContent = (b.label || 'Reviewing Reports') + ' — please wait a moment';
+      $('breakNote').textContent = b.note || 'ডাক্তার এখন রিপোর্ট দেখছেন — একটু পরেই পরের সিরিয়াল ডাকা হবে';
+    } else {
+      $('breakTitle').textContent = (b.labelBn || 'ব্রেক') + ' চলছে';
+      $('breakTitle').style.color = '#b45309';
+      $('breakTitleEn').textContent = (b.label || 'Break') + ' — doctor will return soon';
+      $('breakNote').textContent = b.note || 'ডাক্তার ফিরলেই পরের রোগী ডাকা হবে — অনুগ্রহ করে অপেক্ষা করুন';
+    }
+  }
+  function hideBreak() {
+    if ($('breakCard').style.display !== 'none') { $('breakCard').style.display = 'none'; $('callCard').style.display = 'flex'; }
+    currentBreak = null;
+  }
+  function updateBreakStrip() {
+    const el = $('breakStrip');
+    const listB = allBreaks.filter((b) => !DOCTOR_FILTER || b.doctorName === DOCTOR_FILTER);
+    if (!el) return;
+    if (!listB.length) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    el.innerHTML = listB.map((b) => '<span style="display:inline-flex;align-items:center;gap:6px;"><span class="mso">' + breakIconFor(b.type) + '</span>' + esc(b.labelBn || b.label || 'ব্রেক') + ' — ' + esc(b.doctorName) + '</span>').join('');
+  }
+  function announceBreak(b) {
+    if (!DOCTOR_FILTER || !b || b.doctorName !== DOCTOR_FILTER) return;
+    const bnText = b.type === 'report'
+      ? 'ডাক্তার এখন রিপোর্ট দেখছেন। অনুগ্রহ করে একটু অপেক্ষা করুন।'
+      : (b.labelBn || 'ব্রেক') + ' চলছে। অনুগ্রহ করে একটু অপেক্ষা করুন।';
+    const fallback = () => {
+      if (!('speechSynthesis' in window)) return;
+      const vBn = pickVoice('bn'), vEn = pickVoice('en');
+      const bnFallback = !vBn || !vBn.lang.toLowerCase().startsWith('bn');
+      if (bnFallback) {
+        const rom = { lunch: 'Lunch break cholchhe', namaz: 'Namajer break cholchhe', report: 'Doctor ekhon report dekhchhen', other: 'Break cholchhe' };
+        const v = vEn || vBn;
+        window.speechSynthesis.speak(utter((rom[b.type] || rom.other) + '. Onugroho kore opekkha korun.', v, v ? v.lang : 'en-US', { rate: 0.82, pitch: 1.1 }));
+      } else {
+        window.speechSynthesis.speak(utter(bnText, vBn, vBn.lang, { rate: 0.85, pitch: isFemaleVoice(vBn) ? 1.0 : 1.25 }));
+      }
+    };
+    if (announcing) {
+      if (announceQueue.length < 2) announceQueue.push({ text: bnText, fallback });
+      return;
+    }
+    doSpeakText(bnText, fallback);
+  }
+  socket.on('break.started', (b) => {
+    if (DOCTOR_FILTER && (!b.doctorName || b.doctorName !== DOCTOR_FILTER)) return;
+    if (b.doctorName && !allBreaks.find((x) => x.doctorName === b.doctorName)) allBreaks.push(b);
+    updateBreakStrip();
+    if (DOCTOR_FILTER && b.doctorName === DOCTOR_FILTER) { showBreak(b); chime(); announceBreak(b); }
+  });
+  socket.on('break.ended', (b) => {
+    allBreaks = allBreaks.filter((x) => x.doctorName !== b.doctorName);
+    updateBreakStrip();
+    if (DOCTOR_FILTER && b.doctorName === DOCTOR_FILTER) hideBreak();
+  });
+  fetch('/api/breaks').then((r) => r.json()).then((listB) => {
+    allBreaks = Array.isArray(listB) ? listB : [];
+    const own = DOCTOR_FILTER && allBreaks.find((b) => b.doctorName === DOCTOR_FILTER);
+    if (own) showBreak(own);
+    updateBreakStrip();
+  }).catch(() => {});
+
+  loadDoctorHeader();
+  loadQueue();
+  setInterval(loadQueue, 15000);
+</script>
+</body>
+</html>
+

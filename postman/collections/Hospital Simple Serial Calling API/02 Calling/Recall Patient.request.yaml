@@ -1,0 +1,20 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/patients/:id/recall'
+order: 2000
+pathVariables:
+  - key: id
+    value: '{{patientId}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Status code is 200', function () {
+        pm.response.to.have.status(200);
+      });
+
+      pm.test('Response returns patient data', function () {
+        var json = pm.response.json();
+        var patient = json.data || json;
+        pm.expect(patient).to.be.an('object');
+      });

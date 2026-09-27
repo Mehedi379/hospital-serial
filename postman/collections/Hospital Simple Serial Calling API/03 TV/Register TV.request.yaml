@@ -1,0 +1,36 @@
+$kind: http-request
+method: POST
+url: '{{baseUrl}}/api/tv/register'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "tvName": "Waiting Area 01",
+      "location": "Ground Floor"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('Status code is 200', function () {
+        pm.response.to.have.status(200);
+      });
+
+      pm.test('Response returns a registered TV', function () {
+        var json = pm.response.json();
+        var tv = json.data || json;
+        pm.expect(tv).to.be.an('object');
+      });
+
+      // Save the tv id for later use
+      try {
+        var body = pm.response.json();
+        var tv = body.data || body;
+        if (tv && (tv.tvId || tv.id)) {
+          pm.environment.set('tvId', String(tv.tvId || tv.id));
+        }
+      } catch (e) {}

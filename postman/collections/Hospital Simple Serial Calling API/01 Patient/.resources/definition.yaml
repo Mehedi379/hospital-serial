@@ -1,0 +1,4 @@
+$kind: collection
+name: 01 Patient
+description: Patient entry and lookup endpoints.
+order: 1000

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Doctor & Room Setup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/webp" href="logo-512.webp" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <script src="avatars.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { margin: 0; }
+    .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; line-height: 1; }
+    input, select { outline: none; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen pb-safe">
+
+  <header class="bg-primary-container text-on-primary px-6 py-4 shadow-lg sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-11 h-11 rounded-full bg-white p-1 flex items-center justify-center shrink-0">
+          <img src="logo-transparent.webp" alt="Hospital Logo" class="w-full h-full object-contain" />
+        </div>
+        <div class="min-w-0">
+          <div class="font-display font-extrabold text-xl truncate">Admin — Doctor & Room Setup</div>
+          <div class="text-[12px] text-primary-fixed-dim">ডাক্তার, রুম নম্বর ও ফ্লোর সেটআপ — রুম = ফ্লোর+নম্বর (ফ্লোর ১, রুম ০৩ = Room 103)</div>
+        </div>
+      </div>
+      <a href="index.html" class="shrink-0 text-sm font-bold bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 flex items-center gap-1">
+        <span class="mso text-base">arrow_back</span> Home
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+    <!-- ============ DOCTOR FORM ============ -->
+    <section class="lg:col-span-2 bg-surface-container-lowest rounded-2xl shadow-md p-6 h-fit lg:sticky lg:top-24">
+      <h2 id="formTitle" class="font-display font-bold text-lg mb-1 flex items-center gap-2">
+        <span class="mso text-secondary">person_add</span> Add New Doctor
+      </h2>
+      <p class="text-[12px] text-on-surface-variant mb-4">নতুন ডাক্তার যোগ করুন — রুম ও ফ্লোর নম্বরসহ</p>
+
+      <form id="docForm" class="flex flex-col gap-3">
+        <input type="hidden" name="id" value="" />
+        <label class="text-sm font-bold">Doctor Name (English) *
+          <input name="name" required class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Dr. Abdul Karim" />
+        </label>
+        <label class="text-sm font-bold">ডাক্তারের নাম (বাংলা)
+          <input name="nameBn" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="ডা. আব্দুল করিম" />
+        </label>
+        <label class="text-sm font-bold">Qualification (ডিগ্রি)
+          <input name="qualification" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="MBBS, FCPS (Medicine)" />
+        </label>
+        <label class="text-sm font-bold">Specialty (English)
+          <input name="specialty" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Liver Specialist" />
+        </label>
+        <label class="text-sm font-bold">স্পেশালিটি (বাংলা)
+          <input name="specialtyBn" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="লিভার বিশেষজ্ঞ" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-sm font-bold">Room No. (চেম্বার নম্বর) *
+            <input name="chamberNumber" required class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="03" />
+          </label>
+          <label class="text-sm font-bold">Floor (ফ্লোর)
+            <input name="floor" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="1" />
+          </label>
+        </div>
+        <label class="text-sm font-bold">Photo URL (ঐচ্ছিক — ডাক্তারের আসল ছবি)
+          <input name="photoURL" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="https://... (ছবির লিংক)" />
+          <span class="block text-[11px] font-normal text-on-surface-variant mt-1">না দিলে নাম দেখে নারী/পুরুষ ডাক্তারের ছবি নিজে থেকেই বসবে</span>
+        </label>
+        <div class="flex gap-2 mt-2">
+          <button type="submit" id="submitBtn" class="flex-1 bg-secondary text-on-secondary rounded-xl py-3 font-display font-extrabold active:opacity-90 flex items-center justify-center gap-2">
+            <span class="mso">add</span> ADD DOCTOR
+          </button>
+          <button type="button" id="cancelBtn" onclick="resetForm()" class="hidden px-4 rounded-xl bg-surface-container-high text-on-surface font-bold">Cancel</button>
+        </div>
+      </form>
+      <div id="formMsg" class="hidden mt-3 rounded-xl p-3 text-sm font-bold"></div>
+
+      <div class="mt-6 pt-4 border-t border-outline-variant">
+        <div class="font-display font-bold text-sm mb-2 flex items-center gap-2"><span class="mso text-secondary text-[18px]">tv</span> Screen links (per doctor)</div>
+        <p class="text-[11px] text-on-surface-variant mb-2">প্রতি ডাক্তারের নিজের Assistant + TV স্ক্রিন — লিংক কপি করে সেই ডিভাইসে খুলুন:</p>
+        <select id="linkPicker" onchange="showLinks()" class="w-full bg-surface-container-low rounded-lg px-3 py-2.5 text-sm font-medium mb-2">
+          <option value="">Select a doctor…</option>
+        </select>
+        <div id="linksBox" class="hidden flex flex-col gap-2 text-[12px]">
+          <div class="flex items-center gap-2 bg-surface-container-low rounded-lg px-3 py-2">
+            <span class="mso text-secondary">phone_in_talk</span>
+            <a id="assistLink" target="_blank" class="text-secondary font-bold underline truncate flex-1">assistant</a>
+            <button onclick="copyLink('assistLink')" class="text-on-surface-variant hover:text-secondary shrink-0"><span class="mso text-[16px]">content_copy</span></button>
+          </div>
+          <div class="flex items-center gap-2 bg-surface-container-low rounded-lg px-3 py-2">
+            <span class="mso text-secondary">tv</span>
+            <a id="tvLink" target="_blank" class="text-secondary font-bold underline truncate flex-1">tv</a>
+            <button onclick="copyLink('tvLink')" class="text-on-surface-variant hover:text-secondary shrink-0"><span class="mso text-[16px]">content_copy</span></button>
+          </div>
+          <a id="addHomeLink" target="_blank" class="flex items-center justify-center gap-2 bg-primary text-on-primary font-bold rounded-lg px-3 py-2.5 no-underline">
+            <span class="mso text-[18px]">add_to_home_screen</span> মোবাইল Home Screen-এ যোগ করুন
+          </a>
+          <p class="text-[11px] text-on-surface-variant leading-snug">
+            এই বাটন <b>ডাক্তারের মোবাইল/ট্যাবে</b> খুলে চাপুন — ইনস্টল ডায়ালগ নিজে থেকেই খুলবে। হাসপাতালের লোগো আইকনসহ ওই Assistant প্যানেলটা সরাসরি হোম স্ক্রিনে অ্যাপ হিসেবে বসে যাবে। (iPhone-এ Share → "Add to Home Screen" লাগবে — পেজ নিজেই দেখিয়ে দেবে।)
+          </p>
+          <a href="assistant.html?install=1" target="_blank" class="flex items-center justify-center gap-2 bg-surface-container-high text-on-surface font-bold rounded-lg px-3 py-2.5 no-underline">
+            <span class="mso text-[18px]">phone_in_talk</span> সব ডাক্তারের Assistant ইনস্টল করুন
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DOCTOR LIST ============ -->
+    <section class="lg:col-span-3 flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-display font-bold text-lg">Doctors (<span id="docCount">0</span>)</h2>
+        <span class="text-[11px] text-on-surface-variant">রুম + ফ্লোরসহ সব ডাক্তার</span>
+      </div>
+      <div id="docList" class="flex flex-col gap-2"></div>
+      <div id="docEmpty" class="text-center text-on-surface-variant py-10">No doctors yet.</div>
+
+      <!-- ============ DAILY RESET ============ -->
+      <div class="bg-error-container/40 border border-error-container rounded-2xl p-5 mt-2">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="mso text-error">restart_alt</span>
+          <h2 class="font-display font-bold text-lg text-on-error-container">দিনের ডেটা রিসেট</h2>
+        </div>
+        <p class="text-[12px] text-on-surface-variant mb-3">
+          আজকের সব রোগী মুছে ফেলবে — সিরিয়াল আবার <b>১</b> থেকে শুরু হবে। (মুছে ফেলা ডেটা archive-এ সেভ থাকে, হারায় না।)
+        </p>
+        <div id="resetMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
+        <div class="flex flex-col sm:flex-row gap-2">
+          <button onclick="resetDay('today')" class="flex-1 bg-error text-on-error rounded-xl py-3 font-bold flex items-center justify-center gap-2">
+            <span class="mso">delete_sweep</span> আজকের সব রোগী মুছুন
+          </button>
+          <button onclick="resetDay('all')" class="flex-1 bg-surface-container-high text-on-surface rounded-xl py-3 font-bold flex items-center justify-center gap-2">
+            <span class="mso">delete_forever</span> সব রোগী মুছুন (সম্পূর্ণ)
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const socket = io();
+    const API = '/api';
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+    let doctors = [];
+
+    function msg(text, ok) {
+      const el = $('formMsg');
+      el.textContent = text;
+      el.className = 'mt-3 rounded-xl p-3 text-sm font-bold ' + (ok ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-error-container text-on-error-container');
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 3500);
+    }
+
+    async function load() {
+      const res = await fetch(API + '/doctors');
+      doctors = await res.json();
+      $('docCount').textContent = doctors.length;
+      renderList();
+      renderPicker();
+    }
+
+    function renderList() {
+      $('docEmpty').style.display = doctors.length ? 'none' : 'block';
+      $('docList').innerHTML = doctors.map((d) => {
+        const av = window.doctorAvatar(d.name, d.nameBn, d.photoURL);
+        const _c = parseInt(d.chamberNumber, 10), _f = parseInt(d.floor, 10);
+        const rn = (!isNaN(_f) && _f > 0 && !isNaN(_c)) ? _f * 100 + _c : (isNaN(_c) ? '—' : _c);
+        const avatar = av.img
+          ? `<img src="${esc(d.photoURL)}" class="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-secondary-fixed" />`
+          : `<img src="${av.icon}" class="w-14 h-14 rounded-full object-cover shrink-0 bg-surface-container-low" />`;
+        return `
+        <div class="bg-surface-container-lowest rounded-xl shadow-sm p-4 flex items-center gap-3">
+          ${avatar}
+          <div class="w-11 h-11 rounded-xl bg-secondary-fixed text-on-secondary-fixed flex flex-col items-center justify-center shrink-0">
+            <span class="text-[8px] uppercase font-bold opacity-70">Room</span>
+            <span class="font-mono font-extrabold text-base leading-none">${rn}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold truncate">${esc(d.name)}${d.nameBn ? ` <span class="font-normal text-on-surface-variant">(${esc(d.nameBn)})</span>` : ''}</div>
+            <div class="text-[12px] text-on-surface-variant truncate">${esc(d.qualification || '')}</div>
+            <div class="text-[12px] text-secondary font-semibold truncate">${esc(d.specialty || '')}</div>
+            <div class="text-[11px] text-on-surface-variant mt-0.5">Room ${rn} (ফ্লোর ${esc(d.floor || '—')}, চেম্বার ${esc(d.chamberNumber || '—')})</div>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-1.5 shrink-0">
+            <a href="assistant.html?doctor=${encodeURIComponent(d.name)}&install=1" target="_blank" title="ডাক্তারের মোবাইলে খুলে চাপুন — Home Screen-এ অ্যাপ বসবে" class="px-3 py-2 rounded-lg bg-primary text-on-primary text-sm font-bold flex items-center gap-1"><span class="mso text-[16px]">add_to_home_screen</span><span class="hidden xl:inline">Home</span></a>
+            <button onclick="editDoc('${esc(d.id)}')" class="px-3 py-2 rounded-lg bg-surface-container-high text-sm font-bold flex items-center gap-1"><span class="mso text-[16px]">edit</span>Edit</button>
+            <button onclick="deleteDoc('${esc(d.id)}','${esc(d.name)}')" class="px-3 py-2 rounded-lg bg-error-container text-on-error-container text-sm font-bold flex items-center gap-1"><span class="mso text-[16px]">delete</span></button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderPicker() {
+      $('linkPicker').innerHTML = '<option value="">Select a doctor…</option>' +
+        doctors.map((d) => {
+          const _c = parseInt(d.chamberNumber, 10), _f = parseInt(d.floor, 10);
+          const rn = (!isNaN(_f) && _f > 0 && !isNaN(_c)) ? _f * 100 + _c : (isNaN(_c) ? '—' : _c);
+          return `<option value="${esc(d.name)}">${esc(d.name)} — Room ${rn}</option>`;
+        }).join('');
+    }
+
+    function showLinks() {
+      const name = $('linkPicker').value;
+      const box = $('linksBox');
+      if (!name) { box.classList.add('hidden'); box.classList.remove('flex'); return; }
+      $('assistLink').href = 'assistant.html?doctor=' + encodeURIComponent(name);
+      $('assistLink').textContent = location.origin + '/assistant.html?doctor=' + encodeURIComponent(name);
+      $('tvLink').href = 'tv.html?doctor=' + encodeURIComponent(name);
+      $('tvLink').textContent = location.origin + '/tv.html?doctor=' + encodeURIComponent(name);
+      $('addHomeLink').href = 'assistant.html?doctor=' + encodeURIComponent(name) + '&install=1';
+      box.classList.remove('hidden'); box.classList.add('flex');
+    }
+
+    function copyLink(id) {
+      const a = $(id);
+      navigator.clipboard.writeText(a.href).then(() => msg('Link copied ✓', true)).catch(() => {});
+    }
+
+    $('docForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const payload = {
+        name: fd.get('name'),
+        nameBn: fd.get('nameBn') || '',
+        qualification: fd.get('qualification') || '',
+        specialty: fd.get('specialty') || '',
+        specialtyBn: fd.get('specialtyBn') || '',
+        chamberNumber: fd.get('chamberNumber') || '',
+        floor: fd.get('floor') || '',
+        photoURL: fd.get('photoURL') || '',
+      };
+      const editId = fd.get('id');
+      const res = await fetch(editId ? `${API}/doctors/${editId}` : API + '/doctors', {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) {
+        msg(editId ? 'Doctor updated ✓' : 'Doctor added ✓', true);
+        resetForm();
+        load();
+      } else {
+        msg(body.message || 'Could not save doctor.', false);
+      }
+    });
+
+    function editDoc(id) {
+      const d = doctors.find((x) => String(x.id) === String(id));
+      if (!d) return;
+      const f = $('docForm');
+      f.id.value = d.id;
+      f.name.value = d.name || '';
+      f.nameBn.value = d.nameBn || '';
+      f.qualification.value = d.qualification || '';
+      f.specialty.value = d.specialty || '';
+      f.specialtyBn.value = d.specialtyBn || '';
+      f.chamberNumber.value = d.chamberNumber || '';
+      f.floor.value = d.floor || '';
+      f.photoURL.value = d.photoURL || '';
+      $('formTitle').innerHTML = '<span class="mso text-secondary">edit</span> Edit Doctor';
+      $('submitBtn').innerHTML = '<span class="mso">save</span> SAVE CHANGES';
+      $('cancelBtn').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+      $('docForm').reset();
+      $('docForm').id.value = '';
+      $('formTitle').innerHTML = '<span class="mso text-secondary">person_add</span> Add New Doctor';
+      $('submitBtn').innerHTML = '<span class="mso">add</span> ADD DOCTOR';
+      $('cancelBtn').classList.add('hidden');
+    }
+
+    async function deleteDoc(id, name) {
+      if (!confirm('Remove ' + name + ' from the doctor list?')) return;
+      const res = await fetch(`${API}/doctors/${id}`, { method: 'DELETE' });
+      if (res.ok) { msg('Doctor removed ✓', true); if ($('docForm').id.value === id) resetForm(); load(); }
+      else msg('Could not remove doctor.', false);
+    }
+
+    async function resetDay(scope) {
+      const q = scope === 'all'
+        ? 'সব দিনের সব রোগী মুছে ফেলা হবে (সম্পূর্ণ রিসেট)। নিশ্চিত?'
+        : 'আজকের সব রোগী মুছে ফেলা হবে — সিরিয়াল ১ থেকে শুরু হবে। নিশ্চিত?';
+      if (!confirm(q)) return;
+      const box = $('resetMsg');
+      try {
+        const res = await fetch(`${API}/patients/reset`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope }),
+        });
+        const body = await res.json();
+        box.textContent = body.message || 'Done';
+        box.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 bg-secondary-container/30 text-on-secondary-container';
+        box.classList.remove('hidden');
+      } catch (e) {
+        box.textContent = 'রিসেট ব্যর্থ হলো — সার্ভার চালু আছে তো?';
+        box.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 bg-error-container text-on-error-container';
+        box.classList.remove('hidden');
+      }
+    }
+
+    socket.on('doctors.updated', () => load());
+    load();
+  </script>
+</body>
+</html>

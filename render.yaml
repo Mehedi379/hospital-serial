@@ -1,0 +1,25 @@
+# Render deploy config for the Hospital Serial Calling System.
+#
+# NOTE ON DATA PERSISTENCE:
+#   Render's FREE plan does not support a persistent disk, so data.json is
+#   reset whenever the free server restarts/sleeps. That is fine if the
+#   assistant clears serials daily anyway. To keep data permanently, switch
+#   `plan: free` to `plan: starter` (~$7/mo) and uncomment the `disk:` block
+#   plus the DATA_DIR env var below.
+
+services:
+  - type: web
+    name: hospital-serial-calling
+    runtime: node
+    plan: free
+    rootDir: app
+    buildCommand: npm install
+    startCommand: node server.js
+    # --- Uncomment for permanent storage (requires a paid plan) ---
+    # envVars:
+    #   - key: DATA_DIR
+    #     value: /data
+    # disk:
+    #   name: hospital-data
+    #   mountPath: /data
+    #   sizeGB: 1

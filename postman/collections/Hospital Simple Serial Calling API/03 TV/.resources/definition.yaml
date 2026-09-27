@@ -1,0 +1,4 @@
+$kind: collection
+name: 03 TV
+description: TV registration and listing. TVs connect via Socket.IO after registration.
+order: 3000

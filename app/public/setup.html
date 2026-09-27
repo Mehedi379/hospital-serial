@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup — Connect TVs & Assistants</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <style>
+    body { margin: 0; }
+    .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; line-height: 1; }
+    @media print { .no-print { display: none !important; } body { background: #fff; } }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen">
+
+  <header class="bg-primary-container text-on-primary px-6 py-4 shadow-lg flex items-center gap-3">
+    <div class="w-11 h-11 rounded-full bg-white p-1 flex items-center justify-center shrink-0">
+      <img src="logo-transparent.webp" alt="Logo" class="w-full h-full object-contain" />
+    </div>
+    <div class="flex-1">
+      <div class="font-display font-extrabold text-xl">Setup — Connect Devices</div>
+      <div class="text-[12px] text-primary-fixed-dim">প্রতিটা TV ও Assistant-এর লিংক এখান থেকে নিন</div>
+    </div>
+    <button onclick="window.print()" class="no-print bg-secondary text-on-secondary rounded-lg px-3 py-2 text-sm font-bold flex items-center gap-1"><span class="mso text-[18px]">print</span>Print</button>
+  </header>
+
+  <main class="max-w-4xl mx-auto p-4 sm:p-6 flex flex-col gap-5">
+
+    <!-- Server address -->
+    <section class="bg-surface-container-lowest rounded-2xl shadow-md p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="mso text-secondary">dns</span>
+        <h2 class="font-display font-bold text-lg">Server Address</h2>
+      </div>
+      <p class="text-sm text-on-surface-variant mb-3">
+        সব TV ও ফোন এই সার্ভারের সাথে একই WiFi/LAN-এ থাকতে হবে। নিচের যেই ঠিকানা কাজ করে সেটা বেছে নিন — সব লিংক নিজে থেকে বদলে যাবে।
+      </p>
+      <label class="text-sm font-bold">এই ঠিকানা ব্যবহার করে লিংক বানাও:
+        <select id="baseSelect" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold"></select>
+      </label>
+      <div id="ipHint" class="text-[12px] text-on-surface-variant mt-2"></div>
+    </section>
+
+    <!-- Reception / Admin / Hall TV -->
+    <section class="bg-surface-container-lowest rounded-2xl shadow-md p-5">
+      <div class="flex items-center gap-2 mb-3"><span class="mso text-secondary">apps</span><h2 class="font-display font-bold text-lg">Common Screens</h2></div>
+      <div id="commonLinks" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+    </section>
+
+    <!-- Per-doctor -->
+    <section class="bg-surface-container-lowest rounded-2xl shadow-md p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2"><span class="mso text-secondary">stethoscope</span><h2 class="font-display font-bold text-lg">Per-Doctor Links</h2></div>
+        <a href="admin.html" class="no-print text-secondary text-sm font-bold flex items-center gap-1"><span class="mso text-base">edit</span>ডাক্তার যোগ/এডিট</a>
+      </div>
+      <div id="docLinks" class="flex flex-col gap-3"></div>
+      <div id="docEmpty" class="text-center text-on-surface-variant py-8 text-sm hidden">কোনো ডাক্তার নেই — Admin থেকে যোগ করুন।</div>
+    </section>
+
+    <div class="text-[12px] text-on-surface-variant text-center pb-6">
+      TV-তে লিংক খুলে একবার স্ক্রিনে ট্যাপ করুন (সাউন্ড চালু) • Assistant ফোনে "Add to Home Screen" করলে অ্যাপের মতো খুলবে
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const roomNo = (d) => { const c = parseInt(d.chamberNumber, 10), f = parseInt(d.floor, 10);
+      return (!isNaN(f) && f > 0 && !isNaN(c)) ? f * 100 + c : (isNaN(c) ? '' : c); };
+
+    let base = location.origin; // default: whatever host you opened this page on
+
+    function copy(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const old = btn.innerHTML; btn.innerHTML = '<span class="mso text-[16px]">check</span>Copied';
+        setTimeout(() => btn.innerHTML = old, 1200);
+      }).catch(() => {});
+    }
+    window.copy = copy;
+
+    function linkRow(label, url, sublabel) {
+      return `
+        <div class="bg-surface-container-low rounded-xl p-3 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-bold text-sm">${esc(label)}</div>
+            <a href="${esc(url)}" target="_blank" class="font-mono text-[12px] text-secondary break-all">${esc(url)}</a>
+            ${sublabel ? `<div class="text-[11px] text-on-surface-variant">${esc(sublabel)}</div>` : ''}
+          </div>
+          <div class="flex gap-1.5 shrink-0 no-print">
+            <button onclick="copy('${esc(url)}', this)" class="bg-surface-container rounded-lg px-2.5 py-2 text-[13px] font-bold flex items-center gap-1"><span class="mso text-[16px]">content_copy</span>Copy</button>
+            <a href="${esc(url)}" target="_blank" class="bg-secondary text-on-secondary rounded-lg px-2.5 py-2 text-[13px] font-bold flex items-center gap-1"><span class="mso text-[16px]">open_in_new</span>Open</a>
+          </div>
+        </div>`;
+    }
+
+    function renderCommon() {
+      $('commonLinks').innerHTML =
+        linkRow('Reception', base + '/reception.html') +
+        linkRow('Admin (ডাক্তার সেটআপ)', base + '/admin.html') +
+        linkRow('Hall TV (সব ডাক্তার)', base + '/tv.html');
+    }
+
+    async function renderDoctors() {
+      let docs = [];
+      try { docs = await (await fetch('/api/doctors')).json(); } catch (e) {}
+      $('docEmpty').classList.toggle('hidden', docs.length > 0);
+      $('docLinks').innerHTML = docs.map((d) => {
+        const r = roomNo(d);
+        const tv = base + '/tv/' + r;
+        const as = base + '/assist/' + r;
+        return `
+          <div class="border border-outline-variant rounded-xl p-3">
+            <div class="font-display font-bold mb-2">${esc(d.name)} <span class="font-normal text-on-surface-variant text-sm">• Room ${r} (Floor ${esc(d.floor || '—')})</span></div>
+            <div class="flex flex-col gap-2">
+              ${linkRow('📺 TV Display', tv, 'এই রুমের TV-তে খুলুন')}
+              ${linkRow('📱 Assistant', as, 'ডাক্তারের সহকারীর ফোন/ট্যাবে খুলুন — Add to Home Screen')}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function init() {
+      // Build the base-address options from the server's detected LAN IPs.
+      let info = { ips: [], port: location.port || 5000 };
+      try { info = await (await fetch('/api/server-info')).json(); } catch (e) {}
+      const opts = [];
+      const here = location.origin;
+      opts.push({ label: here + '  (এই পেজ যেখান থেকে খুলেছেন)', value: here });
+      (info.ips || []).forEach((ip) => {
+        const u = location.protocol + '//' + ip.address + ':' + info.port;
+        if (u !== here) opts.push({ label: u + '  (' + ip.iface + ')', value: u });
+      });
+      $('baseSelect').innerHTML = opts.map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
+      base = opts[0].value;
+      $('baseSelect').addEventListener('change', (e) => { base = e.target.value; renderCommon(); renderDoctors(); });
+      $('ipHint').innerHTML = (info.ips && info.ips.length)
+        ? 'সার্ভারের LAN ঠিকানা: <b>' + info.ips.map((i) => esc(i.address)).join(', ') + '</b> — অন্য TV/ফোনে এই ঠিকানা টাইপ করুন।'
+        : 'LAN ঠিকানা পাওয়া যায়নি — সার্ভার PC-তে <code>ipconfig</code> চালিয়ে IPv4 দেখুন।';
+      renderCommon();
+      renderDoctors();
+    }
+    init();
+  </script>
+</body>
+</html>

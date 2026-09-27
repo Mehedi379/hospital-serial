@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Add to Home Screen — Hospital Serial Calling</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <style>
+    body { margin: 0; }
+    .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; line-height: 1; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen pb-safe">
+  <header class="bg-primary-container text-on-primary px-5 py-4 shadow-lg">
+    <div class="max-w-md mx-auto flex items-center gap-3">
+      <div class="w-11 h-11 rounded-full bg-white p-1 flex items-center justify-center shrink-0">
+        <img src="logo-transparent.webp" alt="Hospital Logo" class="w-full h-full object-contain" />
+      </div>
+      <div class="min-w-0">
+        <div class="font-display font-extrabold text-lg truncate">Home Screen-এ অ্যাপ যোগ</div>
+        <div class="text-[12px] text-primary-fixed-dim">হাসপাতালের লোগো আইকনসহ Assistant প্যানেল</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-md mx-auto p-5 flex flex-col gap-4">
+    <!-- STEP 0: which doctor -->
+    <div id="doctorBox" class="bg-surface-container-lowest rounded-2xl shadow-md p-4 flex items-center gap-3">
+      <img id="docAvatar" src="logo-transparent.webp" class="w-12 h-12 rounded-full object-cover shrink-0" alt="" />
+      <div class="min-w-0">
+        <div id="docName" class="font-display font-bold truncate">Assistant প্যানেল</div>
+        <div id="docRoom" class="text-[12px] text-on-surface-variant truncate">সব ডাক্তারের রোগী দেখা যায়</div>
+      </div>
+    </div>
+
+    <!-- STEP 1: switch to HTTPS (secure) — required for direct install -->
+    <div id="stepSecure" class="bg-surface-container-lowest rounded-2xl shadow-md p-5 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <span class="mso text-secondary text-[22px]">lock</span>
+        <span class="font-display font-bold">ধাপ ১ — সিকিউর কানেকশন</span>
+      </div>
+      <p class="text-sm text-on-surface-variant">
+        মোবাইলে <b>সরাসরি ইনস্টল</b> করতে হলে ব্রাউজারের <b>সিকিউর (HTTPS)</b> কানেকশন লাগবে।
+        নিচের বাটনে চাপলেই সিকিউর ঠিকানায় চলে যাবেন।
+      </p>
+      <div class="bg-surface-container-low rounded-xl p-3 text-[12px] leading-relaxed">
+        <b>প্রথমবার</b> খুললে ব্রাউজার একটা <b>লাল warning</b> দেখাবে — এটা স্বাভাবিক (হাসপাতালের নিজের সার্ভার, ইন্টারনেট নয়)।
+        <br><b>Advanced</b> → <b>Proceed anyway / তবুও এগিয়ে যান</b> চাপুন।
+      </div>
+      <button id="goSecureBtn" onclick="goSecure()" class="bg-secondary text-on-secondary rounded-xl py-3.5 font-display font-extrabold flex items-center justify-center gap-2">
+        <span class="mso">lock</span> সিকিউর ঠিকানায় যান
+      </button>
+      <div id="secureErr" class="hidden text-[12px] text-error font-bold"></div>
+    </div>
+
+    <!-- STEP 2: trust the hospital certificate (one time) -->
+    <div id="stepCert" class="hidden bg-surface-container-lowest rounded-2xl shadow-md p-5 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <span class="mso text-secondary text-[22px]">verified_user</span>
+        <span class="font-display font-bold">ধাপ ২ — সার্টিফিকেট ভরসা করুন (একবারই)</span>
+      </div>
+      <p class="text-sm text-on-surface-variant">
+        এই একবার করলে <b>আর কখনো warning দেখবেন না</b> — এবং ইনস্টল এক ট্যাপে হবে।
+      </p>
+      <ol class="text-sm font-medium flex flex-col gap-2 bg-surface-container-low rounded-xl p-3">
+        <li><b>১.</b> নিচের <b>সার্টিফিকেট ডাউনলোড</b> চাপুন</li>
+        <li><b>২.</b> ফোনে Settings → Security → <b>Install a certificate</b> → <b>CA certificate</b></li>
+        <li><b>৩.</b> ডাউনলোড করা <b>hospital-serial-calling.crt</b> ফাইলটা বেছে <b>Install</b> দিন</li>
+        <li><b>৪.</b> ফিরে এসে নিচের <b>আমি ইনস্টল করেছি</b> চাপুন</li>
+      </ol>
+      <a href="/cert" class="bg-surface-container-high text-on-surface rounded-xl py-3 font-bold flex items-center justify-center gap-2 no-underline">
+        <span class="mso">download</span> সার্টিফিকেট ডাউনলোড
+      </a>
+      <button onclick="checkCert()" class="bg-secondary text-on-secondary rounded-xl py-3.5 font-display font-extrabold flex items-center justify-center gap-2">
+        <span class="mso">check</span> আমি ইনস্টল করেছি — পরীক্ষা করুন
+      </button>
+      <button onclick="skipCert()" class="text-[13px] font-bold text-on-surface-variant underline">এখন না — শুধু warning-এ এগিয়ে যাব</button>
+    </div>
+
+    <!-- STEP 3: INSTALL -->
+    <div id="stepInstall" class="hidden bg-secondary-fixed text-on-secondary-fixed rounded-2xl shadow-md p-5 flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <span class="mso text-[22px]">add_to_home_screen</span>
+        <span class="font-display font-bold">ধাপ ৩ — ইনস্টল করুন</span>
+      </div>
+      <p class="text-sm opacity-80">সব প্রস্তুত! নিচের বড় বাটনে চাপুন — ব্রাউজারের নিজের ইনস্টল ডায়ালগ খুলবে, <b>Install</b> চাপলেই হাসপাতালের লোগো আইকন হোম স্ক্রিনে বসে যাবে।</p>
+      <button id="bigInstall" onclick="installNow()" class="bg-secondary text-on-secondary rounded-xl py-4 font-display font-extrabold text-lg flex items-center justify-center gap-2 shadow-md">
+        <span class="mso text-[24px]">add_to_home_screen</span> এখন ইনস্টল করুন
+      </button>
+      <div id="manualHint" class="hidden text-[12px] opacity-80 leading-relaxed bg-white/40 rounded-xl p-3">
+        এই ফোনে অটো-ইনস্টল সাপোর্ট নেই (পুরনো Android বা iPhone)।
+        ব্রাউজারের <b>⋮ মেনু</b> / <b>Share</b> → <b>"Add to Home screen"</b> চাপলে একই কাজ হবে — লোগো আইকনসহ ইনস্টল হবে।
+      </div>
+    </div>
+
+    <div id="statusLine" class="text-center text-[12px] text-on-surface-variant pb-4"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+      ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    const qs = new URLSearchParams(location.search);
+    const doctor = (qs.get('doctor') || '').trim();
+    const SECURE_HOST = qs.get('secure') || ''; // filled by assistant.html redirect (PC LAN IP:5001)
+
+    const isSecure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    // iPhone Safari never fires the native prompt — go straight to manual steps there.
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+    function show(step) {
+      $('stepSecure').classList.toggle('hidden', step !== 'secure');
+      $('stepCert').classList.toggle('hidden', step !== 'cert');
+      $('stepInstall').classList.toggle('hidden', step !== 'install');
+    }
+    function status(t) { $('statusLine').textContent = t; }
+
+    /* Header info: which doctor's panel will be installed. */
+    (async () => {
+      if (!doctor) return;
+      try {
+        const docs = await (await fetch('/api/doctors')).json();
+        const d = docs.find((x) => x.name === doctor);
+        if (!d) return;
+        $('docName').textContent = d.name;
+        const c = parseInt(d.chamberNumber, 10), f = parseInt(d.floor, 10);
+        const rn = (!isNaN(f) && f > 0 && !isNaN(c)) ? f * 100 + c : d.chamberNumber;
+        $('docRoom').textContent = 'Room ' + rn + (d.specialty ? ' • ' + d.specialty : '');
+        $('docAvatar').src = d.photoURL || 'logo-transparent.webp';
+      } catch (e) {}
+    })();
+
+    /* STEP 1: jump from insecure HTTP to the secure origin (same server, HTTPS port). */
+    function goSecure() {
+      const here = new URL(location.href);
+      if (SECURE_HOST) {
+        here.protocol = 'https:';
+        here.host = SECURE_HOST; // e.g. 192.168.1.104:5001 (precomputed on the server side)
+      } else {
+        here.protocol = 'https:';
+        here.port = String((parseInt(location.port || '80', 10)) + 1);
+      }
+      status('সিকিউর ঠিকানায় যাচ্ছি: ' + here.origin);
+      location.href = here.toString();
+    }
+
+    /* STEP 2 check: fetch our own favicon over the SAME secure origin. If the
+       certificate is trusted (or user proceeded anyway), this succeeds silently. */
+    async function checkCert() {
+      try {
+        await fetch('/favicon.ico', { cache: 'no-store' });
+        // Trusted enough — installing works (with or without the CA installed).
+        show('install'); maybeAutoInstall();
+      } catch (e) {
+        status('এখনো warning আসছে — Advanced → Proceed anyway চেপে ফিরে আসুন, অথবা সার্টিফিকেট ইনস্টল করুন।');
+      }
+    }
+    function skipCert() { show('install'); maybeAutoInstall(); }
+
+    /* STEP 3: the native install dialog. */
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      maybeAutoInstall();
+    });
+    function maybeAutoInstall() {
+      // Auto-fire once when we are secure AND the browser supports the prompt.
+      if (!deferredPrompt || isIOS) return;
+      installNow();
+    }
+    async function installNow() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if (choice && choice.outcome === 'accepted') { status('✅ ইনস্টল হয়েছে — হোম স্ক্রিনে লোগো আইকন দেখুন'); }
+        else { status('ইনস্টল বাতিল হলো — আবার চাইলে বাটনে চাপুন।'); }
+        return;
+      }
+      // No prompt API (iPhone / old Android): manual path.
+      $('manualHint').classList.remove('hidden');
+      status('ব্রাউজার মেনু থেকে "Add to Home screen" চাপুন।');
+    }
+
+    window.addEventListener('appinstalled', () => {
+      status('✅ ইনস্টল সম্পন্ন — হোম স্ক্রিনে হাসপাতালের লোগো আইকন এসেছে। ট্যাপ করলেই প্যানেল খুলবে!');
+      $('bigInstall').disabled = true;
+      $('bigInstall').style.opacity = '.55';
+    });
+
+    /* Initial routing. */
+    (async () => {
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (standalone) { show('install'); $('bigInstall').disabled = true; $('bigInstall').style.opacity = '.55'; status('এই অ্যাপটা আগেই ইনস্টল করা আছে ✓ — হোম স্ক্রিনে আইকন দেখুন।'); return; }
+      if (!isSecure) { show('secure'); status('HTTP মোড — সরাসরি ইনস্টলের জন্য সিকিউর কানেকশন লাগবে।'); return; }
+      // Secure context. If the user already proceeded past the warning, we can
+      // try installing right away — the prompt still fires with an untrusted
+      // cert once the page is loaded, so skip the cert lecture for speed.
+      show('install');
+      const swOk = 'serviceWorker' in navigator;
+      status(swOk ? 'সিকিউর মোড ✓ — ইনস্টল বাটনে চাপুন।' : '');
+      if (swOk) { try { await navigator.serviceWorker.register('/sw.js'); } catch (e) {} }
+      // Give the browser a beat to emit beforeinstallprompt; auto-fire if it does.
+      setTimeout(() => { if (deferredPrompt) installNow(); else if (!isIOS) $('manualHint').classList.remove('hidden'); }, 1200);
+    })();
+  </script>
+</body>
+</html>
