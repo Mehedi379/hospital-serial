@@ -106,12 +106,24 @@
       color: var(--navy); line-height: .9; text-align: center;
     }
     .nextList {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      text-align: center; gap: calc(var(--gap) * .25); line-height: 1;
+      display: flex; flex-direction: column; align-items: stretch; justify-content: center;
+      text-align: left; gap: calc(var(--gap) * .25); line-height: 1;
       font-family: 'Poppins', sans-serif; font-weight: 700; font-size: var(--next);
       color: var(--navy); overflow: hidden; width: 100%; height: 100%;
     }
     .nextList > div { line-height: 1; }
+    .nextRow {
+      display: flex; align-items: center; gap: calc(var(--next) * .35);
+      padding-left: calc(var(--gap) * .4); min-width: 0;
+    }
+    .nextRow .nextNum {
+      flex: none; min-width: 1.6em; text-align: center; color: var(--navy);
+      font-weight: 800;
+    }
+    .nextRow .nextName {
+      flex: 1; min-width: 0; font-size: calc(var(--next) * .5); font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .nextList .empty { opacity: .35; }
     .dateBox .boxBody { flex-direction: column; align-items: center; justify-content: center; gap: var(--gap); }
     .dtRow { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: var(--date); color: var(--navy); white-space: nowrap; }
@@ -604,9 +616,9 @@
       const json = await res.json();
       const list = (json.data || json.patients || json || []);
       const waiting = list.filter((p) => p.status === 'WAITING');
-      const next = waiting.slice(0, 4);
+      const next = waiting.slice(0, 6);
       const html = next.length
-        ? next.map((p) => `<div>${esc(p.serialNumber)}</div>`).join('')
+        ? next.map((p) => `<div class="nextRow"><span class="nextNum">${esc(p.serialNumber)}</span><span class="nextName">${esc(p.patientNameBn || p.patientName || '')}</span></div>`).join('')
         : '<span class="empty">—</span>';
       if (html !== lastNextHtml) { $('nextList').innerHTML = html; lastNextHtml = html; scheduleFit(); }
     } catch (e) {
