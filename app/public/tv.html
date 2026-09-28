@@ -105,6 +105,15 @@
       font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--serial);
       color: var(--navy); line-height: .9; text-align: center;
     }
+    .nowServing {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: calc(var(--gap) * .3); width: 100%; height: 100%; min-width: 0; overflow: hidden;
+    }
+    .serialName {
+      font-family: 'Poppins', sans-serif; font-weight: 700; color: var(--navy);
+      line-height: 1; text-align: center; max-width: 100%;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .nextList {
       display: flex; flex-direction: column; align-items: stretch; justify-content: center;
       text-align: left; gap: calc(var(--gap) * .25); line-height: 1;
@@ -213,7 +222,7 @@
       <!-- NOW SERVING -->
       <section class="box">
         <div class="boxHdr">Now Serving</div>
-        <div class="boxBody center"><span id="serial">—</span></div>
+        <div class="boxBody center"><div class="nowServing"><span id="serial">—</span><span id="serialName" class="serialName"></span></div></div>
       </section>
       <!-- NEXT IN LINE -->
       <section class="box">
@@ -551,9 +560,26 @@
     const s = $('serial');
     if (s) {
       const txt = (s.textContent || '').trim() || '0';
-      // NOW SERVING: one big number filling the box height (width-capped for
-      // multi-digit / prefixed serials like "C217").
-      _fitCalc(s, { rows: 1, lineH: 1.0, gapF: 0, maxChars: txt.length, charW: 0.62, min: 20, max: 900 });
+      const nameEl = $('serialName');
+      const hasName = !!(nameEl && (nameEl.textContent || '').trim());
+      // NOW SERVING: big number filling the box; when a patient name is shown
+      // below it, reserve ~half a line of height for the name (lineH 1.8) so the
+      // number stays large but the name fits under it without overflow.
+      _fitCalc(s, { rows: 1, lineH: hasName ? 1.8 : 1.0, gapF: 0, maxChars: txt.length, charW: 0.62, min: 20, max: 900 });
+      // Name is sized at half the number, but also capped to the box width so
+      // the full name shows (long names shrink instead of getting cut off).
+      if (nameEl) {
+        if (!hasName) { nameEl.style.fontSize = '0px'; }
+        else {
+          const half = parseFloat(s.style.fontSize || '0') * 0.5;
+          const wrap = nameEl.parentElement;
+          const availW = wrap ? wrap.clientWidth - 8 : 0;
+          const chars = Math.max(4, (nameEl.textContent || '').trim().length);
+          const byW = availW > 0 ? availW / (chars * 0.62) : half;
+          const f = Math.max(14, Math.min(half, byW));
+          nameEl.style.fontSize = Math.floor(f) + 'px';
+        }
+      }
     }
     const n = $('nextList');
     if (n) {
@@ -608,6 +634,7 @@
     hideBreak();
     if ($('standby')) $('standby').style.display = 'none';
     $('serial').textContent = p.serialNumber;
+    if ($('serialName')) $('serialName').textContent = (p.patientNameBn || p.patientName || '');
     const room = roomNumber(p);
     $('proceedRoom').textContent = 'Please proceed to Room ' + room;
     loadQueue();
