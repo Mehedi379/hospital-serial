@@ -562,21 +562,27 @@
       const txt = (s.textContent || '').trim() || '0';
       const nameEl = $('serialName');
       const hasName = !!(nameEl && (nameEl.textContent || '').trim());
-      // NOW SERVING: big number filling the box; when a patient name is shown
-      // below it, reserve ~half a line of height for the name (lineH 1.8) so the
-      // number stays large but the name fits under it without overflow.
-      _fitCalc(s, { rows: 1, lineH: hasName ? 1.8 : 1.0, gapF: 0, maxChars: txt.length, charW: 0.62, min: 20, max: 900 });
-      // Name is sized at half the number, but also capped to the box width so
-      // the full name shows (long names shrink instead of getting cut off).
+      const box = s.closest('.boxBody');
+      // NOW SERVING: the NUMBER is the focus. When a name is shown, the number
+      // takes ~65% of the box height and the name gets the rest below it.
+      _fitCalc(s, { rows: 1, lineH: hasName ? 1.55 : 1.0, gapF: 0, maxChars: txt.length, charW: 0.62, min: 20, max: 900 });
       if (nameEl) {
         if (!hasName) { nameEl.style.fontSize = '0px'; }
         else {
-          const half = parseFloat(s.style.fontSize || '0') * 0.5;
+          // Name fits inside the leftover space: capped by BOTH the box width
+          // (wide Bangla glyphs → charW .95) and the remaining height, so the
+          // full name always shows and nothing is cut top/bottom. Screen-size
+          // adjusts automatically because it's all derived from the box size.
           const wrap = nameEl.parentElement;
           const availW = wrap ? wrap.clientWidth - 8 : 0;
+          const boxH = box ? box.clientHeight : 0;
+          const numH = parseFloat(s.style.fontSize || '0');
+          const leftH = Math.max(0, boxH - numH * 1.0 - 12); // space under the number
           const chars = Math.max(4, (nameEl.textContent || '').trim().length);
-          const byW = availW > 0 ? availW / (chars * 0.62) : half;
-          const f = Math.max(14, Math.min(half, byW));
+          const byW = availW > 0 ? availW / (chars * 0.95) : 999;
+          const byH = leftH > 0 ? leftH * 0.85 : 999;
+          const cap = numH * 0.7; // never bigger than 70% of the number
+          const f = Math.max(12, Math.min(cap, byW, byH));
           nameEl.style.fontSize = Math.floor(f) + 'px';
         }
       }
