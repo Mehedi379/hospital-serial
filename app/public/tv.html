@@ -121,7 +121,7 @@
       font-weight: 800;
     }
     .nextRow .nextName {
-      flex: 1; min-width: 0; font-size: calc(var(--next) * .5); font-weight: 700;
+      flex: 1; min-width: 0; font-size: .55em; font-weight: 700;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .nextList .empty { opacity: .35; }
@@ -557,12 +557,19 @@
     }
     const n = $('nextList');
     if (n) {
-      // Longest serial currently shown (default 3 digits) governs width.
+      // Longest serial currently shown (default 3 digits) governs number width.
       let maxChars = 3;
-      n.querySelectorAll('div').forEach((d) => { maxChars = Math.max(maxChars, (d.textContent || '').trim().length); });
-      // Sized as if the box always holds 4 rows, so numbers stay a consistent,
-      // large size whether 1 or 4 are waiting.
-      _fitCalc(n, { rows: 4, lineH: 1.05, gapF: 0.25, maxChars, charW: 0.62, min: 20, max: 460 });
+      n.querySelectorAll('.nextNum').forEach((d) => { maxChars = Math.max(maxChars, (d.textContent || '').trim().length); });
+      // Size the rows as if up to 6 fit; on big TVs all 6 fit at this size, on
+      // small screens the font bottoms out at min and the overflow trim below
+      // drops the rows that don't fully fit (so no half-cut line, max 6).
+      _fitCalc(n, { rows: 6, lineH: 1.2, gapF: 0.25, maxChars, charW: 0.62, min: 18, max: 200 });
+      // Hide any trailing rows that would overflow the box (keep at least 1).
+      const rows = Array.prototype.slice.call(n.querySelectorAll('.nextRow'));
+      rows.forEach((r) => { r.style.display = ''; });
+      for (let i = rows.length - 1; i >= 1 && n.scrollHeight > n.clientHeight + 1; i--) {
+        rows[i].style.display = 'none';
+      }
     }
   }
   // Fit across several ticks so it can't get stuck at a stale (tiny) size if it
