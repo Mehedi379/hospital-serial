@@ -589,7 +589,7 @@
       // Size the rows as if up to 6 fit; on big TVs all 6 fit at this size, on
       // small screens the font bottoms out at min and the overflow trim below
       // drops the rows that don't fully fit (so no half-cut line, max 6).
-      _fitCalc(n, { rows: 6, lineH: 1.2, gapF: 0.25, maxChars, charW: 0.62, min: 18, max: 200 });
+      _fitCalc(n, { rows: 6, lineH: 1.05, gapF: 0.15, maxChars, charW: 0.62, min: 18, max: 300 });
       // Hide any trailing rows that would overflow the box (keep at least 1).
       const rows = Array.prototype.slice.call(n.querySelectorAll('.nextRow'));
       rows.forEach((r) => { r.style.display = ''; });
