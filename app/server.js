@@ -547,7 +547,12 @@ app.post('/api/patients/:id/recall', (req, res) => {
   return res.status(200).json({ success: true, message: 'Patient recalled', data: patient });
 });
 
-// POST /api/patients/:id/missed  -> stays in the list
+// How many people a missed serial waits before its turn comes back around.
+// Missing a serial re-queues it this many WAITING patients later (same doctor),
+// so it returns to the front automatically — no manual "Call Again" needed.
+const REQUEUE_AFTER = 3;
+
+// POST /api/patients/:id/missed  -> re-queues the serial 3 people later
 app.post('/api/patients/:id/missed', (req, res) => {
   const patient = findPatient(req.params.id);
   if (!patient) return res.status(404).json({ success: false, message: 'Patient not found' });
@@ -555,15 +560,30 @@ app.post('/api/patients/:id/missed', (req, res) => {
     return res.status(409).json({ success: false, message: 'শুধু CALLED রোগী MISSED করা যায়' });
   }
 
-  patient.status = 'MISSED';
-  // Keep the stored "now calling" snapshot truthful for panels that reconnect.
-  if (currentCall && currentCall.id === patient.id) currentCall.status = 'MISSED';
-  if (patient.doctorName && currentCallByDoctor[patient.doctorName] && currentCallByDoctor[patient.doctorName].id === patient.id) {
-    currentCallByDoctor[patient.doctorName].status = 'MISSED';
+  // Pull the patient out of the queue, then slot it back in REQUEUE_AFTER
+  // WAITING patients (of the same doctor) later. If fewer than that are
+  // waiting, it goes to the end of the list.
+  const from = patients.indexOf(patient);
+  if (from !== -1) patients.splice(from, 1);
+  patient.status = 'WAITING';
+
+  let seen = 0;
+  let insertAt = patients.length;
+  for (let i = 0; i < patients.length; i++) {
+    const q = patients[i];
+    if (q.status === 'WAITING' && isToday(q.createdAt)
+        && String(q.doctorName || '') === String(patient.doctorName || '')) {
+      seen += 1;
+      if (seen === REQUEUE_AFTER) { insertAt = i + 1; break; }
+    }
   }
+  patients.splice(insertAt, 0, patient);
+
+  // No longer "now calling" — clear the snapshot so TVs stop showing it as served.
+  clearCurrentCall(patient);
   saveDb();
   io.emit('patient.updated', patient);
-  return res.status(200).json({ success: true, message: 'Patient marked missed', data: patient });
+  return res.status(200).json({ success: true, message: 'Patient re-queued', data: patient, requeuedAfter: seen });
 });
 
 // POST /api/patients/:id/call-again  -> missed patient back to CALLED + announce
