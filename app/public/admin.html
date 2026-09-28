@@ -154,11 +154,20 @@
           <h2 class="font-display font-bold text-lg">বিজ্ঞাপন / নোটিশ (TV স্ক্রিনে চলবে)</h2>
         </div>
         <p class="text-[12px] text-on-surface-variant mb-3">
-          এখানে যা লিখবেন তা TV স্ক্রিনের নিচে স্ক্রল হয়ে দেখাবে। একাধিক নোটিশ দিলে সবগুলো একসাথে ঘুরে ঘুরে দেখাবে।
+          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি/ভিডিওর জন্য লিংক দিন (ইন্টারনেটে থাকা ছবি বা YouTube ভিডিও)।
         </p>
-        <form id="adForm" class="flex gap-2 mb-3">
-          <input id="adText" maxlength="300" required class="flex-1 bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="যেমন: ডাক্তার দেখাতে রিসেপশনে যোগাযোগ করুন" />
-          <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 font-bold flex items-center gap-1"><span class="mso">add</span> যোগ</button>
+        <form id="adForm" class="flex flex-col gap-2 mb-3">
+          <div class="flex gap-2">
+            <select id="adType" class="bg-surface-container-low rounded-lg px-3 py-2.5 font-bold text-sm">
+              <option value="text">লেখা নোটিশ</option>
+              <option value="image">ছবি / ব্যানার</option>
+              <option value="video">ভিডিও</option>
+            </select>
+            <input id="adSeconds" type="number" min="4" max="300" class="w-24 bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold text-sm" placeholder="সেকেন্ড" title="কত সেকেন্ড দেখাবে" />
+          </div>
+          <input id="adText" maxlength="300" class="bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="লেখা নোটিশ / ছবির ক্যাপশন" />
+          <input id="adUrl" maxlength="1000" class="hidden bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="ছবি বা ভিডিওর লিংক (https://...)" />
+          <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 py-2.5 font-bold flex items-center justify-center gap-1"><span class="mso">add</span> যোগ করুন</button>
         </form>
         <div id="adMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
         <div id="adList" class="flex flex-col gap-2"></div>
@@ -351,22 +360,53 @@
         ads = await res.json();
       } catch (e) { ads = []; }
       $('adEmpty').style.display = ads.length ? 'none' : 'block';
-      $('adList').innerHTML = ads.map((a) => `
+      const kindLabel = { text: 'লেখা', image: 'ছবি', video: 'ভিডিও' };
+      const kindIcon = { text: 'notes', image: 'image', video: 'movie' };
+      $('adList').innerHTML = ads.map((a) => {
+        const t = a.type || (a.url ? 'image' : 'text');
+        const preview = t === 'text' ? esc(a.text || '') : esc(a.url || '');
+        return `
         <div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
-          <div class="flex-1 min-w-0 ${a.enabled ? '' : 'opacity-50 line-through'}">${esc(a.text)}</div>
-          <button onclick="toggleAd('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-sm font-bold ${a.enabled ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${a.enabled ? 'চালু' : 'বন্ধ'}</button>
-          <button onclick="deleteAd('${esc(a.id)}')" class="px-3 py-1.5 rounded-lg bg-error-container text-on-error-container text-sm font-bold flex items-center"><span class="mso text-[16px]">delete</span></button>
-        </div>`).join('');
+          <span class="mso text-secondary shrink-0" title="${kindLabel[t]}">${kindIcon[t]}</span>
+          <div class="flex-1 min-w-0 ${a.enabled ? '' : 'opacity-50 line-through'}">
+            <div class="truncate">${preview}</div>
+            <div class="text-[11px] text-on-surface-variant">${kindLabel[t]} • ${esc(String(a.seconds || 10))}s</div>
+          </div>
+          <button onclick="toggleAd('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-sm font-bold shrink-0 ${a.enabled ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${a.enabled ? 'চালু' : 'বন্ধ'}</button>
+          <button onclick="deleteAd('${esc(a.id)}')" class="px-3 py-1.5 rounded-lg bg-error-container text-on-error-container text-sm font-bold flex items-center shrink-0"><span class="mso text-[16px]">delete</span></button>
+        </div>`;
+      }).join('');
     }
+    // Show the right input(s) for the chosen ad type.
+    function syncAdForm() {
+      const t = $('adType').value;
+      $('adUrl').classList.toggle('hidden', t === 'text');
+      $('adText').placeholder = t === 'text' ? 'লেখা নোটিশ' : 'ক্যাপশন (ঐচ্ছিক)';
+      $('adUrl').placeholder = t === 'video' ? 'ভিডিওর লিংক — YouTube বা .mp4' : 'ছবির লিংক (https://...)';
+    }
+    $('adType').addEventListener('change', syncAdForm);
+    syncAdForm();
     $('adForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const text = $('adText').value.trim();
-      if (!text) return;
+      const type = $('adType').value;
+      const payload = {
+        type,
+        text: $('adText').value.trim(),
+        url: $('adUrl').value.trim(),
+        seconds: Number($('adSeconds').value) || undefined,
+      };
+      if (type === 'text' && !payload.text) return adMsg('লেখা দিন।', false);
+      if (type !== 'text' && !payload.url) return adMsg('ছবি/ভিডিওর লিংক দিন।', false);
       const res = await fetch(API + '/ads', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      if (res.ok) { $('adText').value = ''; adMsg('নোটিশ যোগ হয়েছে ✓', true); loadAds(); }
-      else adMsg('যোগ করা গেল না।', false);
+      if (res.ok) {
+        $('adText').value = ''; $('adUrl').value = ''; $('adSeconds').value = '';
+        adMsg('যোগ হয়েছে ✓', true); loadAds();
+      } else {
+        const b = await res.json().catch(() => ({}));
+        adMsg(b.message || 'যোগ করা গেল না।', false);
+      }
     });
     async function toggleAd(id, enabled) {
       await fetch(API + '/ads/' + id, {

@@ -86,7 +86,7 @@
 
     .board { flex: 1 1 auto; min-height: 0; display: flex; }
     .boxes {
-      flex: 1; display: grid; grid-template-columns: 1.15fr 1fr;
+      flex: 1; display: grid; grid-template-columns: 1.1fr 1fr 1.25fr;
       gap: var(--gap); min-height: 0;
     }
     .box {
@@ -126,23 +126,24 @@
       letter-spacing: .06em; text-transform: uppercase;
     }
 
-    /* Scrolling ads / notices ticker (managed from the admin panel) */
-    #adsBar {
-      flex-shrink: 0; overflow: hidden; white-space: nowrap;
-      background: #c22832; color: #fff; border-radius: var(--radius);
-      padding: calc(var(--pad) * .55) 0;
+    /* Ads / notices panel — pictures, banners & muted video rotate inside the box */
+    .adBox .boxBody { padding: 0; }
+    .adStage {
+      width: 100%; height: 100%; position: relative; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      background: #000; border-radius: 0 0 var(--radius) var(--radius);
     }
-    #adsTrack {
-      display: inline-block; padding-left: 100%;
-      animation: adScroll 30s linear infinite;
+    .adStage .empty {
+      color: #7d5555; opacity: .5; background: #fff; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center; font-size: var(--next);
     }
-    #adsText {
-      font-family: 'Poppins', sans-serif; font-weight: 700; font-size: var(--bar-t);
-      letter-spacing: .02em;
+    .adStage img, .adStage video, .adStage iframe {
+      width: 100%; height: 100%; object-fit: contain; border: 0; display: block; background: #000;
     }
-    @keyframes adScroll {
-      0%   { transform: translateX(0); }
-      100% { transform: translateX(-100%); }
+    .adStage .adText {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: var(--pad); background: #c22832; color: #fff;
+      font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--hdr); line-height: 1.25;
     }
 
     #breakStrip {
@@ -207,6 +208,11 @@
         <div class="boxHdr">Next in Line</div>
         <div class="boxBody"><div id="nextList" class="nextList"><span class="empty">—</span></div></div>
       </section>
+      <!-- ADS / NOTICES (pics, banners, video) -->
+      <section class="box adBox">
+        <div class="boxHdr">Announcements</div>
+        <div class="boxBody" id="adBody"><div id="adStage" class="adStage"><span class="empty">—</span></div></div>
+      </section>
     </div>
   </div>
 
@@ -219,11 +225,6 @@
     <div id="breakTitle">ব্রেক চলছে</div>
     <div id="breakTitleEn">Break in progress</div>
     <div id="breakNote">ডাক্তার ফিরলেই পরের রোগী ডাকা হবে — অনুগ্রহ করে অপেক্ষা করুন</div>
-  </div>
-
-  <!-- =============== ADS / NOTICES (scrolling) =============== -->
-  <div id="adsBar" style="display:none;">
-    <div id="adsTrack"><span id="adsText"></span></div>
   </div>
 
   <!-- =============== BOTTOM BAR =============== -->
@@ -696,25 +697,66 @@
     updateBreakStrip();
   }).catch(() => {});
 
-  /* ---- Ads / notices ticker ---- */
-  let lastAdsText = null;
+  /* ---- Ads / notices panel: rotate pictures, banners & muted video ---- */
+  let adItems = [];
+  let adIndex = 0;
+  let adTimer = null;
+  const ytId = (u) => {
+    const m = String(u).match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/);
+    return m ? m[1] : null;
+  };
+  function adKind(a) {
+    if (a.type) return a.type;
+    if (a.url && (ytId(a.url) || /\.(mp4|webm|ogg)(\?|$)/i.test(a.url))) return 'video';
+    if (a.url) return 'image';
+    return 'text';
+  }
+  function showAd() {
+    const stage = $('adStage');
+    if (!stage || !adItems.length) return;
+    if (adIndex >= adItems.length) adIndex = 0;
+    const a = adItems[adIndex];
+    const kind = adKind(a);
+    const secs = Math.max(4, Number(a.seconds) || (kind === 'video' ? 30 : 10));
+    clearTimeout(adTimer);
+    const next = () => { adIndex = (adIndex + 1) % adItems.length; showAd(); };
+
+    if (kind === 'image') {
+      stage.innerHTML = `<img src="${esc(a.url)}" alt="" />`;
+      adTimer = setTimeout(next, secs * 1000);
+    } else if (kind === 'video') {
+      const yt = ytId(a.url);
+      if (yt) {
+        stage.innerHTML = `<iframe src="https://www.youtube.com/embed/${esc(yt)}?autoplay=1&mute=1&controls=0&loop=1&playlist=${esc(yt)}&modestbranding=1&playsinline=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+        adTimer = setTimeout(next, secs * 1000); // YouTube length unknown → fixed slot
+      } else {
+        stage.innerHTML = `<video src="${esc(a.url)}" muted autoplay playsinline></video>`;
+        const v = stage.querySelector('video');
+        if (adItems.length > 1) v.addEventListener('ended', next, { once: true });
+        else v.loop = true;
+        // Safety fallback if the video stalls / can't load.
+        adTimer = setTimeout(next, Math.max(secs, 60) * 1000);
+        v.addEventListener('error', next, { once: true });
+      }
+    } else {
+      stage.innerHTML = `<div class="adText">${esc(a.text)}</div>`;
+      adTimer = setTimeout(next, secs * 1000);
+    }
+  }
+  let lastAdsSig = null;
   async function loadAds() {
     try {
       const res = await fetch('/api/ads');
       const list = await res.json();
-      const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && a.text);
-      const bar = $('adsBar');
-      if (!enabled.length) { bar.style.display = 'none'; lastAdsText = null; return; }
-      // Join notices with a separator; the CSS marquee scrolls the whole line.
-      const text = enabled.map((a) => a.text).join('     •     ');
-      if (text !== lastAdsText) {
-        $('adsText').textContent = text;
-        lastAdsText = text;
-        // Longer text should scroll slower so it stays readable.
-        const secs = Math.min(90, Math.max(18, Math.round(text.length * 0.45)));
-        $('adsTrack').style.animationDuration = secs + 's';
-      }
-      bar.style.display = 'block';
+      const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));
+      const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds]));
+      if (sig === lastAdsSig) return; // unchanged → don't interrupt current playback
+      lastAdsSig = sig;
+      adItems = enabled;
+      adIndex = 0;
+      clearTimeout(adTimer);
+      if (!adItems.length) { $('adStage').innerHTML = '<span class="empty">—</span>'; return; }
+      showAd();
     } catch (e) { console.error('Ads load failed:', e); }
   }
   socket.on('ads.updated', loadAds);

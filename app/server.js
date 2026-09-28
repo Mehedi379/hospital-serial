@@ -669,23 +669,31 @@ app.get('/api/doctors', (req, res) => {
 // GET /api/ads -> all ads (admin). TV filters to enabled ones itself.
 app.get('/api/ads', (req, res) => res.status(200).json(ads));
 
-// POST /api/ads  { text, enabled? } -> add a notice
+// POST /api/ads  { type, text?, url?, seconds? } -> add a notice / picture / video
 app.post('/api/ads', (req, res) => {
-  const text = String((req.body && req.body.text) || '').trim();
-  if (!text) return res.status(400).json({ success: false, message: 'বিজ্ঞাপনের লেখা দিন' });
-  const ad = { id: String(++adSeq), text: text.slice(0, 300), enabled: true, createdAt: new Date().toISOString() };
+  const b = req.body || {};
+  const type = ['image', 'video', 'text'].includes(b.type) ? b.type : (b.url ? 'image' : 'text');
+  const text = String(b.text || '').trim().slice(0, 300);
+  const url = String(b.url || '').trim().slice(0, 1000);
+  if (type === 'text' && !text) return res.status(400).json({ success: false, message: 'নোটিশের লেখা দিন' });
+  if (type !== 'text' && !url) return res.status(400).json({ success: false, message: 'ছবি/ভিডিওর লিংক দিন' });
+  const seconds = Math.max(4, Math.min(300, Number(b.seconds) || (type === 'video' ? 30 : 10)));
+  const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, createdAt: new Date().toISOString() };
   ads.push(ad);
   saveDb();
   io.emit('ads.updated', ads);
   return res.status(201).json({ success: true, data: ad });
 });
 
-// PUT /api/ads/:id  { text?, enabled? } -> edit or show/hide a notice
+// PUT /api/ads/:id  { text?, url?, seconds?, enabled? } -> edit or show/hide
 app.put('/api/ads/:id', (req, res) => {
   const ad = ads.find((a) => String(a.id) === String(req.params.id));
   if (!ad) return res.status(404).json({ success: false, message: 'Ad not found' });
-  if (req.body && typeof req.body.text === 'string') ad.text = req.body.text.trim().slice(0, 300);
-  if (req.body && typeof req.body.enabled === 'boolean') ad.enabled = req.body.enabled;
+  const b = req.body || {};
+  if (typeof b.text === 'string') ad.text = b.text.trim().slice(0, 300);
+  if (typeof b.url === 'string') ad.url = b.url.trim().slice(0, 1000);
+  if (b.seconds != null) ad.seconds = Math.max(4, Math.min(300, Number(b.seconds) || ad.seconds));
+  if (typeof b.enabled === 'boolean') ad.enabled = b.enabled;
   saveDb();
   io.emit('ads.updated', ads);
   return res.status(200).json({ success: true, data: ad });
