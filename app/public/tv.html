@@ -723,7 +723,7 @@
 
     if (kind === 'image') {
       stage.innerHTML = `<img src="${esc(a.url)}" alt="" />`;
-      adTimer = setTimeout(next, secs * 1000);
+      if (adItems.length > 1) adTimer = setTimeout(next, secs * 1000); // single image: just hold it
     } else if (kind === 'video') {
       const yt = ytId(a.url);
       if (yt) {

@@ -25,7 +25,14 @@ const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 // Serve the TV / Assistant / Reception pages from /public
-app.use(express.static(path.join(__dirname, 'public')));
+// HTML is served no-cache so a device always picks up the newest version on
+// reload (assets keep their normal caching). Prevents TVs showing a stale page
+// after a deploy.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+  },
+}));
 
 /* ------------------------------------------------------------------ */
 /* File-based "database" (zero dependency, survives restart)          */
