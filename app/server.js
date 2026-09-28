@@ -65,6 +65,8 @@ let docSeq = 0;          // internal id counter (doctors)
 let currentCall = null;  // last patient announced (any doctor) — for all-doctor TVs
 const currentCallByDoctor = {}; // doctorName -> last call for that doctor's own TV
 let breaks = {};         // doctorName -> { type, note, startedAt } — doctor is on break (persisted)
+let ads = [];            // scrolling notices/ads shown on the TV board (persisted)
+let adSeq = 0;           // internal id counter (ads)
 
 /* Break types offered on the assistant panel. Label/BnLabel are shown on TVs. */
 const BREAK_TYPES = {
@@ -127,6 +129,8 @@ async function loadDb() {
     if (raw) {
       patients = Array.isArray(raw.patients) ? raw.patients : [];
       tvs = Array.isArray(raw.tvs) ? raw.tvs : [];
+      ads = Array.isArray(raw.ads) ? raw.ads : [];
+      adSeq = Number(raw.adSeq) || ads.reduce((m, a) => Math.max(m, Number(a.id) || 0), 0);
       // Drop records with no created date (corrupt rows can never break boot).
       patients = patients.filter((p) => p && p.createdAt);
       seq = Number(raw.seq) || patients.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0);
@@ -208,7 +212,7 @@ function saveDb() {
 // worst case the previous complete file stays.
 function persistNow() {
   clearTimeout(saveTimer);
-  const blob = { patients, tvs, doctors, seq, docSeq, breaks };
+  const blob = { patients, tvs, doctors, seq, docSeq, breaks, ads, adSeq };
   if (mongoColl) {
     // Cloud: upsert the whole state as one document (fire-and-forget).
     mongoColl.updateOne({ _id: 'state' }, { $set: { data: blob } }, { upsert: true })
@@ -656,6 +660,45 @@ app.get('/api/tv', (req, res) => {
 // GET /api/doctors  -> list for the reception picker / admin / launcher
 app.get('/api/doctors', (req, res) => {
   return res.status(200).json(doctors);
+});
+
+/* ================================================================== */
+/* ADS / NOTICES — scrolling messages shown at the bottom of the TV   */
+/* board. Managed from the admin panel; only ENABLED ones are shown.  */
+/* ================================================================== */
+// GET /api/ads -> all ads (admin). TV filters to enabled ones itself.
+app.get('/api/ads', (req, res) => res.status(200).json(ads));
+
+// POST /api/ads  { text, enabled? } -> add a notice
+app.post('/api/ads', (req, res) => {
+  const text = String((req.body && req.body.text) || '').trim();
+  if (!text) return res.status(400).json({ success: false, message: 'বিজ্ঞাপনের লেখা দিন' });
+  const ad = { id: String(++adSeq), text: text.slice(0, 300), enabled: true, createdAt: new Date().toISOString() };
+  ads.push(ad);
+  saveDb();
+  io.emit('ads.updated', ads);
+  return res.status(201).json({ success: true, data: ad });
+});
+
+// PUT /api/ads/:id  { text?, enabled? } -> edit or show/hide a notice
+app.put('/api/ads/:id', (req, res) => {
+  const ad = ads.find((a) => String(a.id) === String(req.params.id));
+  if (!ad) return res.status(404).json({ success: false, message: 'Ad not found' });
+  if (req.body && typeof req.body.text === 'string') ad.text = req.body.text.trim().slice(0, 300);
+  if (req.body && typeof req.body.enabled === 'boolean') ad.enabled = req.body.enabled;
+  saveDb();
+  io.emit('ads.updated', ads);
+  return res.status(200).json({ success: true, data: ad });
+});
+
+// DELETE /api/ads/:id -> remove a notice
+app.delete('/api/ads/:id', (req, res) => {
+  const before = ads.length;
+  ads = ads.filter((a) => String(a.id) !== String(req.params.id));
+  if (ads.length === before) return res.status(404).json({ success: false, message: 'Ad not found' });
+  saveDb();
+  io.emit('ads.updated', ads);
+  return res.status(200).json({ success: true });
 });
 
 /* ================================================================== */

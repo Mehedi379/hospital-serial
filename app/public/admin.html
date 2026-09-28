@@ -146,6 +146,24 @@
           </button>
         </div>
       </div>
+
+      <!-- ============ ADS / NOTICES ============ -->
+      <div class="bg-surface-container-lowest rounded-2xl shadow-md p-5 mt-2">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="mso text-secondary">campaign</span>
+          <h2 class="font-display font-bold text-lg">বিজ্ঞাপন / নোটিশ (TV স্ক্রিনে চলবে)</h2>
+        </div>
+        <p class="text-[12px] text-on-surface-variant mb-3">
+          এখানে যা লিখবেন তা TV স্ক্রিনের নিচে স্ক্রল হয়ে দেখাবে। একাধিক নোটিশ দিলে সবগুলো একসাথে ঘুরে ঘুরে দেখাবে।
+        </p>
+        <form id="adForm" class="flex gap-2 mb-3">
+          <input id="adText" maxlength="300" required class="flex-1 bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="যেমন: ডাক্তার দেখাতে রিসেপশনে যোগাযোগ করুন" />
+          <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 font-bold flex items-center gap-1"><span class="mso">add</span> যোগ</button>
+        </form>
+        <div id="adMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
+        <div id="adList" class="flex flex-col gap-2"></div>
+        <div id="adEmpty" class="text-center text-on-surface-variant py-4 text-sm">এখনো কোনো নোটিশ নেই।</div>
+      </div>
     </section>
   </main>
 
@@ -317,6 +335,52 @@
 
     socket.on('doctors.updated', () => load());
     load();
+
+    /* ============ ADS / NOTICES ============ */
+    let ads = [];
+    function adMsg(text, ok) {
+      const el = $('adMsg');
+      el.textContent = text;
+      el.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 ' + (ok ? 'bg-secondary-container/30 text-on-secondary-container' : 'bg-error-container text-on-error-container');
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 3000);
+    }
+    async function loadAds() {
+      try {
+        const res = await fetch(API + '/ads');
+        ads = await res.json();
+      } catch (e) { ads = []; }
+      $('adEmpty').style.display = ads.length ? 'none' : 'block';
+      $('adList').innerHTML = ads.map((a) => `
+        <div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
+          <div class="flex-1 min-w-0 ${a.enabled ? '' : 'opacity-50 line-through'}">${esc(a.text)}</div>
+          <button onclick="toggleAd('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-sm font-bold ${a.enabled ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${a.enabled ? 'চালু' : 'বন্ধ'}</button>
+          <button onclick="deleteAd('${esc(a.id)}')" class="px-3 py-1.5 rounded-lg bg-error-container text-on-error-container text-sm font-bold flex items-center"><span class="mso text-[16px]">delete</span></button>
+        </div>`).join('');
+    }
+    $('adForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = $('adText').value.trim();
+      if (!text) return;
+      const res = await fetch(API + '/ads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
+      });
+      if (res.ok) { $('adText').value = ''; adMsg('নোটিশ যোগ হয়েছে ✓', true); loadAds(); }
+      else adMsg('যোগ করা গেল না।', false);
+    });
+    async function toggleAd(id, enabled) {
+      await fetch(API + '/ads/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
+      });
+      loadAds();
+    }
+    async function deleteAd(id) {
+      if (!confirm('এই নোটিশ মুছে ফেলবেন?')) return;
+      await fetch(API + '/ads/' + id, { method: 'DELETE' });
+      loadAds();
+    }
+    socket.on('ads.updated', loadAds);
+    loadAds();
   </script>
 </body>
 </html>
