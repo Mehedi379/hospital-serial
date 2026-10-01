@@ -4,7 +4,7 @@
  * socket.io) is ALWAYS fetched fresh from the network — we only cache the
  * static shell (html/js/icons), never the API responses.
  */
-const CACHE = 'hospital-shell-v4';
+const CACHE = 'hospital-shell-v5';
 const SHELL = [
   '/assistant.html',
   '/theme.js',
