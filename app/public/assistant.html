@@ -6,7 +6,7 @@
   <title>Assistant Panel — Hospital Smart Queue</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@600;700;800&family=Noto+Sans+Bengali:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
   <link rel="icon" href="favicon.ico" sizes="any" />
   <link rel="icon" type="image/webp" href="logo-512.webp" />
@@ -34,6 +34,7 @@
   <script src="translit.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="customselect.js"></script>
+  <script src="printer.js"></script>
   <style>
     html, body { margin: 0; }
     body { overscroll-behavior: none; }
@@ -84,6 +85,9 @@
       <div class="flex items-center gap-2 shrink-0">
         <button id="installBtn" onclick="installApp()" class="hidden h-10 px-3 rounded-full bg-primary-container text-on-primary items-center gap-1.5 shadow-md">
           <span class="mso text-[18px]">install_mobile</span><span class="text-[13px] font-bold">Install</span>
+        </button>
+        <button onclick="HospitalPrinter.openSetup()" title="Printer setup" class="w-10 h-10 rounded-full bg-surface-container text-on-surface flex items-center justify-center shadow-md">
+          <span class="mso text-[22px]">print</span>
         </button>
         <button onclick="openAddModal()" class="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-md">
           <span class="mso text-[22px]">person_add</span>
@@ -503,6 +507,7 @@
             </div>
           </div>
           <div class="flex gap-1.5 shrink-0">
+            <button onclick="printSerial('${p.id}')" title="Print ticket" class="px-2.5 py-2 rounded-lg bg-surface-container text-sm font-bold"><span class="mso text-[16px]">print</span></button>
             ${p.status === 'MISSED'
               ? `<button onclick="call('${p.id}','call-again')" class="px-3 py-2 rounded-lg bg-secondary text-on-secondary text-sm font-bold">CALL AGAIN</button>`
               : p.status === 'COMPLETED'
@@ -590,6 +595,21 @@
         const fresh = patients.find((x) => x.id === body.data.id);
         if (fresh) setCurrent(fresh);
       }
+    }
+
+    /* ---------- Print a serial ticket (POS / Bluetooth) ---------- */
+    // Room via the ONE shared rule in printer.js (doctor directory → patient).
+    function printSerial(id) {
+      const p = patients.find((x) => x.id === id);
+      if (!p) return showToast('রোগী পাওয়া যায়নি', 'err');
+      const doc = doctors.find((x) => x.name === p.doctorName);
+      HospitalPrinter.printTicket({
+        serial: p.serialNumber,
+        name: p.patientNameBn || p.patientName || '',
+        nameEn: p.patientName || '',
+        doctor: p.doctorName || '',
+        room: window.HospitalPrinter.roomFor(doc, p),
+      });
     }
 
     function callNext() {
