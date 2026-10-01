@@ -28,14 +28,16 @@
       if (doctor) document.querySelector('meta[name="apple-mobile-web-app-title"]').content = doctor;
     })();
   </script>
-  <script src="theme.js"></script>
-  <script src="vendor/tailwind.js"></script>
-  <script src="avatars.js"></script>
-  <script src="translit.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="customselect.js"></script>
-  <script src="printer.js"></script>
   <style>
+    /* BOOT SPLASH — paints with the FIRST frame (inline CSS, no JS/Tailwind
+       dependency) so the app opens straight on the hospital logo. Kills the
+       plain-white flash that used to show while the head scripts loaded. */
+    #bootSplash { position:fixed; inset:0; z-index:99999; background:#fff;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+      transition:opacity .35s ease; }
+    #bootSplash img { width:110px; height:110px; object-fit:contain; }
+    #bootSplash .bn { font:800 15px 'Noto Sans Bengali','Inter',system-ui,sans-serif; color:#3a0a0d; }
+    #bootSplash.bootSplashHide { opacity:0; pointer-events:none; }
     html, body { margin: 0; }
     body { overscroll-behavior: none; }
     .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; line-height: 1; }
@@ -59,6 +61,34 @@
   </style>
 </head>
 <body class="bg-surface text-on-surface font-body select-none flex flex-col min-h-screen pb-28">
+
+  <!-- BOOT SPLASH: visible from the very first frame; hidden once the app is ready -->
+  <div id="bootSplash">
+    <img src="logo-transparent.webp" alt="Sylhet Gastroliver Hospital">
+    <div class="bn">সিলেট গ্যাস্ট্রোলিভার হাসপাতাল</div>
+  </div>
+  <script>
+    // Hide the splash as soon as the page has painted its real content —
+    // DOMContentLoaded + 300ms, hard-capped at 2.5s so a failed request can
+    // never leave the app stuck behind it.
+    (function () {
+      var s = document.getElementById('bootSplash');
+      if (!s) return;
+      var gone = false;
+      var hide = function () {
+        if (gone) return; gone = true;
+        s.classList.add('bootSplashHide');
+        setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 400);
+      };
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(hide, 300);
+      } else {
+        document.addEventListener('DOMContentLoaded', function () { setTimeout(hide, 300); });
+      }
+      window.addEventListener('load', function () { setTimeout(hide, 150); });
+      setTimeout(hide, 2500);
+    })();
+  </script>
 
   <!-- =============== HEADER =============== -->
   <header class="fixed top-0 w-full z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,.06)] pt-safe">
@@ -349,6 +379,16 @@
       </button>
     </div>
   </nav>
+
+  <!-- App libraries (order matters) — loaded here, AFTER the body paints,
+       so the boot splash shows instantly instead of a blank white screen. -->
+  <script src="theme.js"></script>
+  <script src="vendor/tailwind.js"></script>
+  <script src="avatars.js"></script>
+  <script src="translit.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="customselect.js"></script>
+  <script src="printer.js"></script>
 
   <script>
     const socket = io();

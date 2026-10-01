@@ -515,7 +515,7 @@
         syncSetup();
         toast('✅ ব্লুটুথ প্রিন্টার যুক্ত হলো', 'ok');
       } catch (e) {
-        if (e && e.name === 'NotFoundError') return; // user cancelled the picker
+        if (e instanceof UserCancelled) return; // user closed the picker — not an error
         toast('ব্লুটুথ যুক্ত করা গেল না — আবার চেষ্টা করুন', 'err');
       }
     };
