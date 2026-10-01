@@ -124,6 +124,15 @@ const DEFAULT_DOCTORS = [
 const findDoctor = (name) =>
   doctors.find((d) => d.name.toLowerCase() === String(name || '').trim().toLowerCase());
 
+/* Bangla (০-৯) / Arabic-Indic (٠-٩) numerals -> ASCII, so room math works even
+   when staff type the চেম্বার/floor in Bangla digits (e.g. "২০৮" -> "208").
+   Non-digit text (like "lift's 1") is left untouched. */
+function toAsciiDigits(s) {
+  return String(s == null ? '' : s)
+    .replace(/[০-৯]/g, (d) => String(d.charCodeAt(0) - 0x09E6))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
 async function loadDb() {
   try {
     let raw = null;
@@ -149,6 +158,15 @@ async function loadDb() {
         breaks = (raw.breaks && typeof raw.breaks === 'object' && !Array.isArray(raw.breaks)) ? raw.breaks : {};
         // Drop breaks of doctors that no longer exist.
         for (const bn of Object.keys(breaks)) if (!doctors.find((d) => d.name === bn)) delete breaks[bn];
+        // One-time migration: normalise any Bangla/Arabic numerals already stored
+        // in room/floor to ASCII so the Room number stops showing "—".
+        let _migrated = false;
+        for (const d of doctors) {
+          const c = toAsciiDigits(d.chamberNumber), f = toAsciiDigits(d.floor);
+          if (c !== d.chamberNumber) { d.chamberNumber = c; _migrated = true; }
+          if (f !== d.floor) { d.floor = f; _migrated = true; }
+        }
+        if (_migrated) saveDb();
       } else {
         doctors = DEFAULT_DOCTORS.map((d) => ({ id: String(++docSeq), ...d }));
         saveDb();
@@ -971,8 +989,8 @@ app.post('/api/doctors', (req, res) => {
     qualification: qualification || '',
     specialty: specialty || '',
     specialtyBn: specialtyBn || '',
-    chamberNumber: String(chamberNumber || '').trim(),
-    floor: String(floor || '').trim(),
+    chamberNumber: toAsciiDigits(chamberNumber).trim(),
+    floor: toAsciiDigits(floor).trim(),
     photoURL: String(photoURL || '').trim(),
   };
   doctors.push(doc);
@@ -994,8 +1012,8 @@ app.put('/api/doctors/:id', (req, res) => {
   if (qualification !== undefined) doc.qualification = qualification;
   if (specialty !== undefined) doc.specialty = specialty;
   if (specialtyBn !== undefined) doc.specialtyBn = specialtyBn;
-  if (chamberNumber !== undefined) doc.chamberNumber = String(chamberNumber).trim();
-  if (floor !== undefined) doc.floor = String(floor).trim();
+  if (chamberNumber !== undefined) doc.chamberNumber = toAsciiDigits(chamberNumber).trim();
+  if (floor !== undefined) doc.floor = toAsciiDigits(floor).trim();
   if (photoURL !== undefined) doc.photoURL = String(photoURL).trim();
   saveDb();
   io.emit('doctors.updated', doctors);
