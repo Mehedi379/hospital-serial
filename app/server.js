@@ -14,6 +14,7 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
+const multer = require('multer');
 const { Server } = require('socket.io');
 const translit = require('./public/translit'); // Bangla <-> English name auto-conversion (shared with browser)
 
@@ -45,6 +46,33 @@ const fs = require('fs');
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 const DB_FILE = path.join(DATA_DIR, 'data.json');
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOAD_DIR, {
+  maxAge: '7d',
+  setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
+}));
+
+const IMAGE_TYPES = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
+const adImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (req, file, done) => {
+      const ext = IMAGE_TYPES[file.mimetype];
+      done(null, require('crypto').randomUUID() + ext);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, done) => {
+    if (!IMAGE_TYPES[file.mimetype]) return done(new Error('শুধু JPG, PNG, WEBP বা GIF ছবি আপলোড করা যাবে'));
+    return done(null, true);
+  },
+});
 
 /* ------------------------------------------------------------------ */
 /* Optional MongoDB persistence. If MONGODB_URI is set (e.g. on Render) */
@@ -694,6 +722,22 @@ app.get('/api/doctors', (req, res) => {
 // GET /api/ads -> all ads (admin). TV filters to enabled ones itself.
 app.get('/api/ads', (req, res) => res.status(200).json(ads));
 
+// POST /api/ads/upload -> save an image locally so TVs do not depend on
+// third-party image hosts or their hotlink/embedding policies.
+app.post('/api/ads/upload', (req, res) => {
+  adImageUpload.single('image')(req, res, (err) => {
+    if (err) {
+      const tooLarge = err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE';
+      return res.status(tooLarge ? 413 : 400).json({
+        success: false,
+        message: tooLarge ? 'ছবির সাইজ সর্বোচ্চ ১০ MB হতে পারবে' : err.message,
+      });
+    }
+    if (!req.file) return res.status(400).json({ success: false, message: 'একটি ছবি নির্বাচন করুন' });
+    return res.status(201).json({ success: true, url: '/uploads/' + req.file.filename });
+  });
+});
+
 // POST /api/ads  { type, text?, url?, seconds? } -> add a notice / picture / video
 app.post('/api/ads', (req, res) => {
   const b = req.body || {};
@@ -726,9 +770,17 @@ app.put('/api/ads/:id', (req, res) => {
 
 // DELETE /api/ads/:id -> remove a notice
 app.delete('/api/ads/:id', (req, res) => {
-  const before = ads.length;
+  const removed = ads.find((a) => String(a.id) === String(req.params.id));
+  if (!removed) return res.status(404).json({ success: false, message: 'Ad not found' });
+  if (removed.url && removed.url.startsWith('/uploads/')) {
+    const filename = path.basename(removed.url);
+    if (filename === removed.url.slice('/uploads/'.length)) {
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, filename)); } catch (e) {
+        if (e.code !== 'ENOENT') console.error('  Uploaded ad image cleanup failed:', e.message);
+      }
+    }
+  }
   ads = ads.filter((a) => String(a.id) !== String(req.params.id));
-  if (ads.length === before) return res.status(404).json({ success: false, message: 'Ad not found' });
   saveDb();
   io.emit('ads.updated', ads);
   return res.status(200).json({ success: true });

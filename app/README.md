@@ -99,6 +99,7 @@ Then open (each on its own device / browser tab):
 | DELETE | `/api/doctors/:id` | Remove doctor |
 | POST | `/api/tv/register` | Register a TV |
 | GET | `/api/tv` | List TVs |
+| POST | `/api/ads/upload` | Upload an ad image (`multipart/form-data`, field `image`, max 10 MB; JPG/PNG/WEBP/GIF) |
 
 Real-time Socket.IO event: **`patient.called`** `{ serialNumber, patientName, doctorName, chamberNumber, callCount }`.
 
@@ -107,3 +108,4 @@ Real-time Socket.IO event: **`patient.called`** `{ serialNumber, patientName, do
 - **Voice**: uses the browser's built-in Web Speech API with a **female voice** when available (picked automatically per language). Announcements are **spoken twice** (English + Bangla, then repeated) after a soft chime, spoken slowly (rate 0.75) for clarity. Press the **VOICE TEST** button on the TV header to check the sound level and see which voices are installed. Bangla voice quality depends on the TV device/browser (Chrome on Android TV works well; a Bangla TTS voice such as Google বাংলা gives the best result). Keep the TV browser tab focused and volume up. Click **VOICE TEST** once if the browser blocks autoplay audio.
 - **Data is in memory** — it resets when the server restarts. This keeps the demo simple. For permanent storage, connect a database (see `postman/documents/DEPLOYMENT_ROADMAP.md`).
 - The matching **Postman collection** (`Hospital Simple Serial Calling API`) can test every endpoint against `http://localhost:5000`.
+- **TV ads/images**: From Admin, choose **ছবি / ব্যানার** and upload a JPG, PNG, WEBP, or GIF image (up to 10 MB). Uploaded images are served by the hospital server itself, avoiding external image-host hotlink and embedding blocks. The existing image URL option is still available.
