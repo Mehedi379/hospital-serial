@@ -155,7 +155,7 @@
           <h2 class="font-display font-bold text-lg">বিজ্ঞাপন / নোটিশ (TV স্ক্রিনে চলবে)</h2>
         </div>
         <p class="text-[12px] text-on-surface-variant mb-3">
-          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি/ব্যানারের জন্য ফাইল বাছাই করে আপলোড করুন—কোনো ছবির লিংক লাগবে না। ভিডিওর জন্য YouTube বা .mp4 লিংক দিন।
+          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি আপলোড করুন অথবা ছবির URL দিন—যেকোনো একটি হলেই হবে। ভিডিওর জন্য YouTube বা .mp4 লিংক দিন।
         </p>
         <form id="adForm" class="flex flex-col gap-2 mb-3">
           <div class="flex gap-2">
@@ -173,6 +173,7 @@
             <span class="text-[11px] font-normal text-on-surface-variant">JPG, PNG, WEBP বা GIF • সর্বোচ্চ ১০ MB</span>
           </label>
           <input id="adUrl" maxlength="1000" class="hidden bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="ছবি বা ভিডিওর লিংক (https://...)" />
+          <div id="adUrlHint" class="hidden text-[11px] text-on-surface-variant -mt-1">ছবি আপলোড করুন অথবা ছবির URL দিন। দুটো দিলে আপলোড করা ছবিটি ব্যবহার হবে।</div>
           <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 py-2.5 font-bold flex items-center justify-center gap-1"><span class="mso">add</span> যোগ করুন</button>
         </form>
         <div id="adMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
@@ -386,11 +387,12 @@
     // Show the right input(s) for the chosen ad type.
     function syncAdForm() {
       const t = $('adType').value;
-      $('adUrl').classList.toggle('hidden', t !== 'video');
+      $('adUrl').classList.toggle('hidden', t === 'text');
       $('adUploadWrap').classList.toggle('hidden', t !== 'image');
+      $('adUrlHint').classList.toggle('hidden', t !== 'image');
       $('adText').placeholder = t === 'text' ? 'লেখা নোটিশ' : 'ক্যাপশন (ঐচ্ছিক)';
-      $('adFile').required = t === 'image';
-      $('adUrl').placeholder = 'ভিডিওর লিংক — YouTube বা .mp4';
+      $('adFile').required = false;
+      $('adUrl').placeholder = t === 'image' ? 'ছবির URL (https://...)' : 'ভিডিওর লিংক — YouTube বা .mp4';
     }
     $('adType').addEventListener('change', syncAdForm);
     syncAdForm();
@@ -404,8 +406,8 @@
         seconds: Number($('adSeconds').value) || undefined,
       };
       if (type === 'text' && !payload.text) return adMsg('লেখা দিন।', false);
-      if (type === 'image' && !$('adFile').files.length) return adMsg('ছবি/ব্যানার ফাইল বাছাই করুন।', false);
-      if (type === 'image') {
+      if (type === 'image' && !$('adFile').files.length && !payload.url) return adMsg('ছবি আপলোড করুন অথবা ছবির URL দিন।', false);
+      if (type === 'image' && $('adFile').files.length) {
         const formData = new FormData();
         formData.append('image', $('adFile').files[0]);
         const uploadRes = await fetch(API + '/announcements/upload', { method: 'POST', body: formData });
