@@ -155,7 +155,7 @@
           <h2 class="font-display font-bold text-lg">বিজ্ঞাপন / নোটিশ (TV স্ক্রিনে চলবে)</h2>
         </div>
         <p class="text-[12px] text-on-surface-variant mb-3">
-          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি/ভিডিওর জন্য লিংক দিন (ইন্টারনেটে থাকা ছবি বা YouTube ভিডিও)।
+          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি/ব্যানারের জন্য ফাইল বাছাই করে আপলোড করুন—কোনো ছবির লিংক লাগবে না। ভিডিওর জন্য YouTube বা .mp4 লিংক দিন।
         </p>
         <form id="adForm" class="flex flex-col gap-2 mb-3">
           <div class="flex gap-2">
@@ -167,6 +167,11 @@
             <input id="adSeconds" type="number" min="4" max="300" class="w-24 bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold text-sm" placeholder="সেকেন্ড" title="কত সেকেন্ড দেখাবে" />
           </div>
           <input id="adText" maxlength="300" class="bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="লেখা নোটিশ / ছবির ক্যাপশন" />
+          <label id="adUploadWrap" class="hidden flex-col gap-1 text-sm font-bold">
+            ছবি / ব্যানার বাছাই করুন
+            <input id="adFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium text-sm" />
+            <span class="text-[11px] font-normal text-on-surface-variant">JPG, PNG, WEBP বা GIF • সর্বোচ্চ ১০ MB</span>
+          </label>
           <input id="adUrl" maxlength="1000" class="hidden bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="ছবি বা ভিডিওর লিংক (https://...)" />
           <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 py-2.5 font-bold flex items-center justify-center gap-1"><span class="mso">add</span> যোগ করুন</button>
         </form>
@@ -381,9 +386,11 @@
     // Show the right input(s) for the chosen ad type.
     function syncAdForm() {
       const t = $('adType').value;
-      $('adUrl').classList.toggle('hidden', t === 'text');
+      $('adUrl').classList.toggle('hidden', t !== 'video');
+      $('adUploadWrap').classList.toggle('hidden', t !== 'image');
       $('adText').placeholder = t === 'text' ? 'লেখা নোটিশ' : 'ক্যাপশন (ঐচ্ছিক)';
-      $('adUrl').placeholder = t === 'video' ? 'ভিডিওর লিংক — YouTube বা .mp4' : 'ছবির লিংক (https://...)';
+      $('adFile').required = t === 'image';
+      $('adUrl').placeholder = 'ভিডিওর লিংক — YouTube বা .mp4';
     }
     $('adType').addEventListener('change', syncAdForm);
     syncAdForm();
@@ -397,12 +404,21 @@
         seconds: Number($('adSeconds').value) || undefined,
       };
       if (type === 'text' && !payload.text) return adMsg('লেখা দিন।', false);
-      if (type !== 'text' && !payload.url) return adMsg('ছবি/ভিডিওর লিংক দিন।', false);
+      if (type === 'image' && !$('adFile').files.length) return adMsg('ছবি/ব্যানার ফাইল বাছাই করুন।', false);
+      if (type === 'image') {
+        const formData = new FormData();
+        formData.append('image', $('adFile').files[0]);
+        const uploadRes = await fetch(API + '/ads/upload', { method: 'POST', body: formData });
+        const uploaded = await uploadRes.json().catch(() => ({}));
+        if (!uploadRes.ok) return adMsg(uploaded.message || 'ছবি আপলোড করা গেল না।', false);
+        payload.url = uploaded.url;
+      }
+      if (type === 'video' && !payload.url) return adMsg('ভিডিওর লিংক দিন।', false);
       const res = await fetch(API + '/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       if (res.ok) {
-        $('adText').value = ''; $('adUrl').value = ''; $('adSeconds').value = '';
+        $('adText').value = ''; $('adUrl').value = ''; $('adFile').value = ''; $('adSeconds').value = '';
         adMsg('যোগ হয়েছে ✓', true); loadAds();
       } else {
         const b = await res.json().catch(() => ({}));
