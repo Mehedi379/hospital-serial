@@ -362,7 +362,7 @@
     }
     async function loadAds() {
       try {
-        const res = await fetch(API + '/ads');
+        const res = await fetch(API + '/announcements');
         ads = await res.json();
       } catch (e) { ads = []; }
       $('adEmpty').style.display = ads.length ? 'none' : 'block';
@@ -408,13 +408,13 @@
       if (type === 'image') {
         const formData = new FormData();
         formData.append('image', $('adFile').files[0]);
-        const uploadRes = await fetch(API + '/ads/upload', { method: 'POST', body: formData });
+        const uploadRes = await fetch(API + '/announcements/upload', { method: 'POST', body: formData });
         const uploaded = await uploadRes.json().catch(() => ({}));
         if (!uploadRes.ok) return adMsg(uploaded.message || 'ছবি আপলোড করা গেল না।', false);
         payload.url = uploaded.url;
       }
       if (type === 'video' && !payload.url) return adMsg('ভিডিওর লিংক দিন।', false);
-      const res = await fetch(API + '/ads', {
+      const res = await fetch(API + '/announcements', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       if (res.ok) {
@@ -426,17 +426,17 @@
       }
     });
     async function toggleAd(id, enabled) {
-      await fetch(API + '/ads/' + id, {
+      await fetch(API + '/announcements/' + id, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
       });
       loadAds();
     }
     async function deleteAd(id) {
       if (!confirm('এই নোটিশ মুছে ফেলবেন?')) return;
-      await fetch(API + '/ads/' + id, { method: 'DELETE' });
+      await fetch(API + '/announcements/' + id, { method: 'DELETE' });
       loadAds();
     }
-    socket.on('ads.updated', loadAds);
+    socket.on('announcements.updated', loadAds);
     loadAds();
   </script>
 </body>
