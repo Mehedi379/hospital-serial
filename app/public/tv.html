@@ -798,7 +798,7 @@
   let lastAdsSig = null;
   async function loadAds() {
     try {
-      const res = await fetch('/api/ads');
+      const res = await fetch('/api/announcements');
       const list = await res.json();
       const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));
       const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds]));
@@ -811,7 +811,7 @@
       showAd();
     } catch (e) { console.error('Ads load failed:', e); }
   }
-  socket.on('ads.updated', loadAds);
+  socket.on('announcements.updated', loadAds);
 
   loadDoctorHeader();
   loadQueue();
@@ -820,4 +820,3 @@
 </script>
 </body>
 </html>
-

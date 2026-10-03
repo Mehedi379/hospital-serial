@@ -99,7 +99,9 @@ Then open (each on its own device / browser tab):
 | DELETE | `/api/doctors/:id` | Remove doctor |
 | POST | `/api/tv/register` | Register a TV |
 | GET | `/api/tv` | List TVs |
-| POST | `/api/ads/upload` | Upload an ad image (`multipart/form-data`, field `image`, max 10 MB; JPG/PNG/WEBP/GIF) |
+| GET/POST | `/api/announcements` | List announcements / add a text, image, or video announcement |
+| POST | `/api/announcements/upload` | Upload an announcement image (`multipart/form-data`, field `image`, max 10 MB; JPG/PNG/WEBP/GIF) |
+| PUT/DELETE | `/api/announcements/:id` | Update, enable/disable, or remove an announcement |
 
 Real-time Socket.IO event: **`patient.called`** `{ serialNumber, patientName, doctorName, chamberNumber, callCount }`.
 

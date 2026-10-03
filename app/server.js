@@ -719,12 +719,14 @@ app.get('/api/doctors', (req, res) => {
 /* ADS / NOTICES — scrolling messages shown at the bottom of the TV   */
 /* board. Managed from the admin panel; only ENABLED ones are shown.  */
 /* ================================================================== */
-// GET /api/ads -> all ads (admin). TV filters to enabled ones itself.
-app.get('/api/ads', (req, res) => res.status(200).json(ads));
+const announcementsRouter = express.Router();
 
-// POST /api/ads/upload -> save an image locally so TVs do not depend on
+// GET / -> all announcements (admin). TV filters to enabled ones itself.
+announcementsRouter.get('/', (req, res) => res.status(200).json(ads));
+
+// POST /upload -> save an image locally so TVs do not depend on
 // third-party image hosts or their hotlink/embedding policies.
-app.post('/api/ads/upload', (req, res) => {
+announcementsRouter.post('/upload', (req, res) => {
   adImageUpload.single('image')(req, res, (err) => {
     if (err) {
       const tooLarge = err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE';
@@ -738,8 +740,8 @@ app.post('/api/ads/upload', (req, res) => {
   });
 });
 
-// POST /api/ads  { type, text?, url?, seconds? } -> add a notice / picture / video
-app.post('/api/ads', (req, res) => {
+// POST / { type, text?, url?, seconds? } -> add a notice / picture / video
+announcementsRouter.post('/', (req, res) => {
   const b = req.body || {};
   const type = ['image', 'video', 'text'].includes(b.type) ? b.type : (b.url ? 'image' : 'text');
   const text = String(b.text || '').trim().slice(0, 300);
@@ -750,12 +752,13 @@ app.post('/api/ads', (req, res) => {
   const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, createdAt: new Date().toISOString() };
   ads.push(ad);
   saveDb();
+  io.emit('announcements.updated', ads);
   io.emit('ads.updated', ads);
   return res.status(201).json({ success: true, data: ad });
 });
 
-// PUT /api/ads/:id  { text?, url?, seconds?, enabled? } -> edit or show/hide
-app.put('/api/ads/:id', (req, res) => {
+// PUT /:id { text?, url?, seconds?, enabled? } -> edit or show/hide
+announcementsRouter.put('/:id', (req, res) => {
   const ad = ads.find((a) => String(a.id) === String(req.params.id));
   if (!ad) return res.status(404).json({ success: false, message: 'Ad not found' });
   const b = req.body || {};
@@ -764,12 +767,13 @@ app.put('/api/ads/:id', (req, res) => {
   if (b.seconds != null) ad.seconds = Math.max(4, Math.min(300, Number(b.seconds) || ad.seconds));
   if (typeof b.enabled === 'boolean') ad.enabled = b.enabled;
   saveDb();
+  io.emit('announcements.updated', ads);
   io.emit('ads.updated', ads);
   return res.status(200).json({ success: true, data: ad });
 });
 
-// DELETE /api/ads/:id -> remove a notice
-app.delete('/api/ads/:id', (req, res) => {
+// DELETE /:id -> remove a notice
+announcementsRouter.delete('/:id', (req, res) => {
   const removed = ads.find((a) => String(a.id) === String(req.params.id));
   if (!removed) return res.status(404).json({ success: false, message: 'Ad not found' });
   if (removed.url && removed.url.startsWith('/uploads/')) {
@@ -782,9 +786,13 @@ app.delete('/api/ads/:id', (req, res) => {
   }
   ads = ads.filter((a) => String(a.id) !== String(req.params.id));
   saveDb();
+  io.emit('announcements.updated', ads);
   io.emit('ads.updated', ads);
   return res.status(200).json({ success: true });
 });
+
+app.use('/api/announcements', announcementsRouter);
+app.use('/api/ads', announcementsRouter);
 
 /* ================================================================== */
 /* PWA MANIFEST (per-doctor installable Assistant app)                */
