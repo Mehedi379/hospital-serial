@@ -413,16 +413,10 @@ app.post('/api/patients', (req, res) => {
     });
   }
 
-  const rawName = String(patientName).trim();
-  const rawBn = String(patientNameBn || '').trim();
-  let finalName = rawName;
-  let finalNameBn = rawBn;
-  if (rawName && translit.detectScript(rawName) === 'en') {
-    if (!finalNameBn) finalNameBn = translit.toBangla(rawName); // English typed → Bangla auto
-  } else if (rawName && translit.detectScript(rawName) === 'bn') {
-    finalNameBn = rawName;                                      // Bangla typed → stays Bangla
-    finalName = translit.toEnglish(rawName) || rawName;         // → English auto (primary)
-  }
+  // Name is stored EXACTLY as typed — no auto Bangla/English conversion.
+  // Whatever reception/assistant enters is what every screen shows.
+  const finalName = String(patientName).trim();
+  const finalNameBn = String(patientNameBn || '').trim();
 
   // The chamber ALWAYS follows the doctor from the directory — an assistant
   // for one doctor can never register a serial into another doctor's chamber.
@@ -471,6 +465,56 @@ app.post('/api/patients', (req, res) => {
   saveDb();
   io.emit('patient.added', patient); // let assistant panels refresh live
   return res.status(201).json(patient);
+});
+
+// POST /api/patients/bulk  -> add many patients at once (from a pasted / imported
+// / scanned list). Body: { doctorName, names: ["Md. Karim", "Rahim", ...] }.
+// Each name gets the NEXT free serial for that doctor today, in list order.
+app.post('/api/patients/bulk', (req, res) => {
+  const { doctorName, names } = req.body || {};
+  if (!doctorName || !Array.isArray(names)) {
+    return res.status(400).json({ success: false, message: 'doctorName and names[] are required' });
+  }
+  const clean = names
+    .map((n) => String(n == null ? '' : n).trim())
+    .filter((n) => n.length);
+  if (!clean.length) return res.status(400).json({ success: false, message: 'কোনো নাম পাওয়া যায়নি' });
+  if (clean.length > 500) return res.status(400).json({ success: false, message: 'একবারে সর্বোচ্চ ৫০০ জন' });
+
+  const doc = findDoctor(doctorName);
+  const chamber = doc ? doc.chamberNumber : '';
+  const docKey = String(doctorName).trim().toLowerCase();
+  // Start from the current highest serial for this doctor today, then count up.
+  let serial = patients
+    .filter((p) => isToday(p.createdAt) && String(p.doctorName || '').trim().toLowerCase() === docKey)
+    .reduce((m, p) => Math.max(m, Number(p.serialNumber) || 0), 0);
+
+  const created = clean.map((name) => {
+    serial += 1;
+    const patient = {
+      id: nextId(),
+      patientName: name,            // stored EXACTLY as given — no conversion
+      patientNameBn: '',
+      serialNumber: serial,
+      doctorName,
+      doctorNameBn: doc ? doc.nameBn : '',
+      doctorQualification: doc ? doc.qualification : '',
+      doctorSpecialty: doc ? doc.specialty : '',
+      doctorSpecialtyBn: doc ? doc.specialtyBn : '',
+      chamberNumber: chamber,
+      status: 'WAITING',
+      callCount: 0,
+      calledAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    patients.push(patient);
+    return patient;
+  });
+
+  saveDb();
+  io.emit('patient.added', created[created.length - 1]); // nudge panels to reload
+  io.emit('patient.updated', {});
+  return res.status(201).json({ success: true, count: created.length, data: created });
 });
 
 // GET /api/patients  -> today's patients (optional ?doctor=Dr.+Name filter)
@@ -529,6 +573,32 @@ app.post('/api/patients/reset', (req, res) => {
   io.emit('patients.reset', { scope: scope || 'today', doctor: doctor || null, removed: removed.length });
   io.emit('patient.updated', {}); // nudge all panels to reload
   return res.status(200).json({ success: true, message: `${removed.length} জন রোগী মুছে ফেলা হলো — সিরিয়াল আবার ১ থেকে শুরু হবে`, removed: removed.length });
+});
+
+// PATCH /api/patients/:id  -> fix a wrong name (or serial). Body: { patientName?, serialNumber? }
+// Name is kept EXACTLY as given. Used by the "edit" (pencil) button in the lists.
+app.patch('/api/patients/:id', (req, res) => {
+  const patient = findPatient(req.params.id);
+  if (!patient) return res.status(404).json({ success: false, message: 'Patient not found' });
+  const b = req.body || {};
+  if (typeof b.patientName === 'string') {
+    const name = b.patientName.trim();
+    if (!name) return res.status(400).json({ success: false, message: 'নাম খালি রাখা যাবে না' });
+    patient.patientName = name;
+    patient.patientNameBn = ''; // no auto conversion
+  }
+  if (b.serialNumber != null && Number(b.serialNumber) > 0) {
+    const serial = Number(b.serialNumber);
+    const docKey = String(patient.doctorName || '').trim().toLowerCase();
+    const dup = patients.find((p) => p.id !== patient.id && isToday(p.createdAt)
+      && String(p.doctorName || '').trim().toLowerCase() === docKey
+      && Number(p.serialNumber) === serial);
+    if (dup) return res.status(409).json({ success: false, message: `Serial ${serial} আগেই আছে (${dup.patientName})` });
+    patient.serialNumber = serial;
+  }
+  saveDb();
+  io.emit('patient.updated', patient);
+  return res.status(200).json({ success: true, data: patient });
 });
 
 // DELETE /api/patients/:id  -> remove a patient entry (admin cleanup / wrong entry)

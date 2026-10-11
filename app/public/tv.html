@@ -640,7 +640,7 @@
     hideBreak();
     if ($('standby')) $('standby').style.display = 'none';
     $('serial').textContent = p.serialNumber;
-    if ($('serialName')) $('serialName').textContent = (p.patientNameBn || p.patientName || '');
+    if ($('serialName')) $('serialName').textContent = (p.patientName || '');
     const room = roomNumber(p);
     $('proceedRoom').textContent = 'Please proceed to Room ' + room;
     loadQueue();
@@ -658,7 +658,7 @@
       const waiting = list.filter((p) => p.status === 'WAITING');
       const next = waiting.slice(0, 6);
       const html = next.length
-        ? next.map((p) => `<div class="nextRow"><span class="nextNum">${esc(p.serialNumber)}</span><span class="nextName">${esc(p.patientNameBn || p.patientName || '')}</span></div>`).join('')
+        ? next.map((p) => `<div class="nextRow"><span class="nextNum">${esc(p.serialNumber)}</span><span class="nextName">${esc(p.patientName || '')}</span></div>`).join('')
         : '<span class="empty">—</span>';
       if (html !== lastNextHtml) { $('nextList').innerHTML = html; lastNextHtml = html; scheduleFit(); }
     } catch (e) {

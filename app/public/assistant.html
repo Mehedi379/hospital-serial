@@ -119,6 +119,9 @@
         <button onclick="HospitalPrinter.openSetup()" title="Printer setup" class="w-10 h-10 rounded-full bg-surface-container text-on-surface flex items-center justify-center shadow-md">
           <span class="mso text-[22px]">print</span>
         </button>
+        <button onclick="openBulkAdd()" title="একসাথে অনেক রোগী" class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-md">
+          <span class="mso text-[22px]">group_add</span>
+        </button>
         <button onclick="openAddModal()" class="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-md">
           <span class="mso text-[22px]">person_add</span>
         </button>
@@ -281,12 +284,8 @@
         </div>
         <button onclick="closeAddModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
       </div>      <form id="addForm" class="flex flex-col gap-3">
-        <label class="text-sm font-bold">Patient Name (English / নাম)
-          <input name="patientName" id="aNameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Md. Abdul Karim অথবা মোঃ আব্দুল করিম" />
-          <span id="aNameHint" class="block text-[11px] font-semibold text-secondary mt-1 hidden"></span>
-        </label>
-        <label class="text-sm font-bold">রোগীর নাম (বাংলা)
-          <input name="patientNameBn" id="aNameBn" autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="মোঃ আব্দুল করিম" />
+        <label class="text-sm font-bold">Patient Name / রোগীর নাম
+          <input name="patientName" id="aNameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="যা লিখবেন TV-তে ঠিক তাই দেখাবে" />
         </label>
         <div class="grid grid-cols-2 gap-3">
           <label class="text-sm font-bold">Serial No.
@@ -389,6 +388,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="customselect.js"></script>
   <script src="printer.js"></script>
+  <script src="bulk-add.js"></script>
 
   <script>
     const socket = io();
@@ -547,6 +547,7 @@
             </div>
           </div>
           <div class="flex gap-1.5 shrink-0">
+            <button onclick="editName('${p.id}')" title="নাম ঠিক করুন" class="px-2.5 py-2 rounded-lg bg-surface-container text-sm font-bold"><span class="mso text-[16px]">edit</span></button>
             <button onclick="printSerial('${p.id}')" title="Print ticket" class="px-2.5 py-2 rounded-lg bg-surface-container text-sm font-bold"><span class="mso text-[16px]">print</span></button>
             ${p.status === 'MISSED'
               ? `<button onclick="call('${p.id}','call-again')" class="px-3 py-2 rounded-lg bg-secondary text-on-secondary text-sm font-bold">CALL AGAIN</button>`
@@ -645,7 +646,7 @@
       const doc = doctors.find((x) => x.name === p.doctorName);
       HospitalPrinter.printTicket({
         serial: p.serialNumber,
-        name: p.patientNameBn || p.patientName || '',
+        name: p.patientName || '',
         nameEn: p.patientName || '',
         doctor: p.doctorName || '',
         room: window.HospitalPrinter.roomFor(doc, p),
@@ -676,6 +677,27 @@
     }
 
     /* ---------- Add patient modal (scroll-locked, doctor-locked) ---------- */
+    function openBulkAdd() {
+      window.BulkAdd.open({
+        doctors, patients,
+        lockDoctor: DOCTOR_FILTER || null,   // per-doctor panel: all names go to this doctor
+        onDone: (r) => { load(); showToast('✅ ' + r.count + ' জন রোগী যোগ হলো', 'ok'); },
+      });
+    }
+    async function editName(id) {
+      const p = patients.find((x) => x.id === id);
+      if (!p) return;
+      const name = prompt('নাম ঠিক করুন:', p.patientName || '');
+      if (name == null) return;
+      const v = name.trim();
+      if (!v || v === p.patientName) return;
+      const res = await fetch(API + '/patients/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientName: v }),
+      });
+      if (res.ok) load();
+      else { const e = await res.json().catch(() => ({})); showToast('⚠ ' + (e.message || 'বদলানো গেল না'), 'err'); }
+    }
     function openAddModal() {
       $('addModal').classList.remove('hidden'); $('addModal').classList.add('flex');
       document.body.classList.add('modal-open');   // freeze background scroll
@@ -705,45 +727,7 @@
       $('aSerial').placeholder = 'অটো: ' + (max + 1);
     }
 
-    /* ---- Name auto-conversion in Add-Patient modal ---- */
-    const aNameEn = $('aNameEn');
-    const aNameBn = $('aNameBn');
-    let aTranslitTimer = null;
-    if (aNameEn && aNameBn && window.translit) {
-      let lastEdit = null;
-      aNameEn.addEventListener('input', () => {
-        lastEdit = 'en';
-        const v = aNameEn.value.trim();
-        const hint = $('aNameHint');
-        if (!v) { hint.classList.add('hidden'); return; }
-        if (window.translit.detectScript(v) === 'en') {
-          const bn = window.translit.toBangla(v); // instant local guess
-          if (bn) { aNameBn.value = bn; hint.textContent = 'বাংলা অটো: ' + bn; hint.classList.remove('hidden'); }
-          clearTimeout(aTranslitTimer);
-          aTranslitTimer = setTimeout(async () => {
-            try {
-              const r = await (await fetch(API + '/translit?text=' + encodeURIComponent(v))).json();
-              if (r && r.bangla && lastEdit === 'en' && aNameEn.value.trim() === v) {
-                aNameBn.value = r.bangla; hint.textContent = 'বাংলা অটো: ' + r.bangla; hint.classList.remove('hidden');
-              }
-            } catch (e) {}
-          }, 350);
-        } else {
-          const en = window.translit.toEnglish(v);
-          if (en) { hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
-        }
-      });
-      aNameBn.addEventListener('input', () => {
-        lastEdit = 'bn';
-        const v = aNameBn.value.trim();
-        const hint = $('aNameHint');
-        if (!v) { if (lastEdit === 'bn') hint.classList.add('hidden'); return; }
-        if (window.translit.detectScript(v) === 'bn') {
-          const en = window.translit.toEnglish(v);
-          if (en) { aNameEn.value = en; hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
-        }
-      });
-    }
+    /* Name is used exactly as typed — no auto Bangla/English conversion. */
 
     $('addForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -752,7 +736,6 @@
       const doctorName = fd.get('doctorName') || ($('docSelect') && $('docSelect').value);
       const payload = {
         patientName: fd.get('patientName'),
-        patientNameBn: fd.get('patientNameBn') || '',
         // SIMPLE SERIAL: empty field -> server assigns the next free number
         serialNumber: fd.get('serialNumber') ? Number(fd.get('serialNumber')) : 0,
         doctorName,

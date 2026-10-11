@@ -17,6 +17,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="customselect.js"></script>
   <script src="printer.js"></script>
+  <script src="bulk-add.js"></script>
   <style>
     body { margin: 0; }
     .mso { font-family: 'Material Symbols Outlined'; vertical-align: middle; }
@@ -41,15 +42,13 @@
   <main class="max-w-5xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Form -->
     <section class="bg-surface-container-lowest rounded-2xl shadow-md p-6">
-      <h2 class="font-display font-bold text-lg mb-4">New Patient</h2>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-display font-bold text-lg">New Patient</h2>
+        <button type="button" id="bulkBtn" class="bg-primary text-on-primary rounded-lg px-3 py-2 text-sm font-bold flex items-center gap-1"><span class="mso text-base">group_add</span> একসাথে অনেক</button>
+      </div>
       <form id="form" class="flex flex-col gap-3">
-        <label class="text-sm font-bold">Patient Name (English / নাম)
-          <input name="patientName" id="nameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Md. Abdul Karim অথবা মোঃ আব্দুল করিম — যেকোনো ভাষায় লিখুন" />
-          <span id="nameAutoHint" class="block text-[11px] font-semibold text-secondary mt-1 hidden"></span>
-        </label>
-        <label class="text-sm font-bold">রোগীর নাম (বাংলা)
-          <input name="patientNameBn" id="nameBn" autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="মোঃ আব্দুল করিম" />
-          <span class="block text-[11px] font-normal text-on-surface-variant mt-1">ইংরেজি লিখলে বাংলা নিজে থেকেই হবে — TV-তে দুই ভাষাতেই দেখাবে</span>
+        <label class="text-sm font-bold">Patient Name / রোগীর নাম
+          <input name="patientName" id="nameEn" required autocomplete="off" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="যা লিখবেন TV-তে ঠিক তাই দেখাবে" />
         </label>
         <label class="text-sm font-bold">Serial Number
           <input name="serialNumber" id="serialInput" type="number" min="1" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="অটো — নিজে বসবে" />
@@ -157,69 +156,18 @@
       }
     });
 
-    /* ---- Name auto-conversion (live): English -> Bangla, Bangla -> English ----
-       Staff type in whichever language they prefer; the other language fills in
-       automatically. Server does the same on save as a safety net. */
+    /* Name is used exactly as typed — no auto Bangla/English conversion. */
     const nameEn = $('nameEn');
-    const nameBn = $('nameBn');
-    let lastEdited = null; // which field the staff last typed in
-    let translitTimer = null;
-    // Accurate English -> Bangla via the server (Google), debounced. Falls back
-    // to the local rule-based converter instantly / when offline.
-    async function autoBangla(v) {
-      const hint = $('nameAutoHint');
-      // instant local guess first (so it never feels laggy)
-      let bn = window.translit ? window.translit.toBangla(v) : '';
-      if (lastEdited === 'en' && bn) { nameBn.value = bn; hint.textContent = 'বাংলা নাম অটো: ' + bn; hint.classList.remove('hidden'); }
-      clearTimeout(translitTimer);
-      translitTimer = setTimeout(async () => {
-        try {
-          const r = await (await fetch(API + '/translit?text=' + encodeURIComponent(v))).json();
-          if (r && r.bangla && lastEdited === 'en' && nameEn.value.trim() === v) {
-            nameBn.value = r.bangla;
-            hint.textContent = 'বাংলা নাম অটো: ' + r.bangla;
-            hint.classList.remove('hidden');
-          }
-        } catch (e) { /* offline — keep the local guess */ }
-      }, 350);
-    }
-    nameEn.addEventListener('input', () => {
-      lastEdited = 'en';
-      if (!window.translit) return;
-      const v = nameEn.value.trim();
-      const hint = $('nameAutoHint');
-      if (!v) { hint.classList.add('hidden'); return; }
-      if (window.translit.detectScript(v) === 'en') {
-        autoBangla(v);
-      } else {
-        const en = window.translit.toEnglish(v);
-        if (en) { hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
-      }
-    });
-    nameBn.addEventListener('input', () => {
-      lastEdited = 'bn';
-      if (!window.translit) return;
-      const v = nameBn.value.trim();
-      const hint = $('nameAutoHint');
-      if (!v) { if (lastEdited === 'bn') hint.classList.add('hidden'); return; }
-      if (window.translit.detectScript(v) === 'bn') {
-        const en = window.translit.toEnglish(v);
-        if (en) { nameEn.value = en; hint.textContent = 'English auto: ' + en; hint.classList.remove('hidden'); }
-      }
-    });
 
     $('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const payload = {
         patientName: fd.get('patientName'),
-        patientNameBn: fd.get('patientNameBn') || '',
         serialNumber: Number(fd.get('serialNumber')),
         doctorName: fd.get('doctorName'),
         chamberNumber: fd.get('chamberNumber'),
       };
-      // Bangla-typed name: server stores it as patientNameBn and fills English.
-      // (The API takes patientName as the primary field either way.)
       const res = await fetch(API + '/patients', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
@@ -232,7 +180,6 @@
         e.target.reset();
         $('docMeta').textContent = '';
         $('chamberInput').value = '';
-        $('nameAutoHint').classList.add('hidden');
         const sh = document.getElementById('serialHint');
         if (sh) sh.classList.add('hidden');
         // Reset the serial suggestion for the next patient (SIMPLE SERIAL).
@@ -256,8 +203,25 @@
           <span class="font-mono font-extrabold text-xl w-9 text-center text-secondary">${esc(p.serialNumber)}</span>
           <span class="font-bold flex-1 truncate">${esc(p.patientName)}</span>
           <span class="text-[11px] font-bold px-2 py-0.5 rounded ${statusStyle[p.status] || ''}">${esc(p.status)}</span>
+          <button onclick="editName('${p.id}')" title="নাম ঠিক করুন" class="w-9 h-9 rounded-lg bg-surface-container text-on-surface flex items-center justify-center shrink-0"><span class="mso text-[18px]">edit</span></button>
           <button onclick="printSerial('${p.id}')" title="Print ticket" class="w-9 h-9 rounded-lg bg-surface-container text-on-surface flex items-center justify-center shrink-0"><span class="mso text-[18px]">print</span></button>
         </li>`).join('');
+    }
+
+    /* ---------- Fix a wrong name ---------- */
+    async function editName(id) {
+      const p = patients.find((x) => x.id === id);
+      if (!p) return;
+      const name = prompt('নাম ঠিক করুন:', p.patientName || '');
+      if (name == null) return;
+      const v = name.trim();
+      if (!v || v === p.patientName) return;
+      const res = await fetch(API + '/patients/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientName: v }),
+      });
+      if (res.ok) load();
+      else { const e = await res.json().catch(() => ({})); alert('❌ ' + (e.message || 'বদলানো গেল না')); }
     }
 
     /* ---------- Print a serial ticket (POS / Bluetooth) ---------- */
@@ -268,12 +232,18 @@
       const doc = doctors.find((x) => x.name === p.doctorName);
       HospitalPrinter.printTicket({
         serial: p.serialNumber,
-        name: p.patientNameBn || p.patientName || '',
+        name: p.patientName || '',
         nameEn: p.patientName || '',
         doctor: p.doctorName || '',
         room: window.HospitalPrinter.roomFor(doc, p),
       });
     }
+
+    const bulkBtn = document.getElementById('bulkBtn');
+    if (bulkBtn) bulkBtn.onclick = () => window.BulkAdd.open({
+      doctors, patients,
+      onDone: (r) => { load(); $('confirm').classList.remove('hidden'); $('confirmText').textContent = `✅ ${r.count} জন রোগী একসাথে যোগ হলো`; },
+    });
 
     socket.on('patient.added', load);
     socket.on('patient.updated', load);
