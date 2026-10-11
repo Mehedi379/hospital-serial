@@ -1105,7 +1105,7 @@ app.get('/api/tts', async (req, res) => {
 
 // POST /api/doctors  -> add a doctor
 app.post('/api/doctors', (req, res) => {
-  const { name, nameBn, qualification, specialty, specialtyBn, chamberNumber, floor, photoURL } = req.body || {};
+  const { name, nameBn, qualification, specialty, specialtyBn, chamberNumber, floor, photoURL, bannerURL } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ success: false, message: 'Doctor name is required' });
   }
@@ -1122,6 +1122,7 @@ app.post('/api/doctors', (req, res) => {
     chamberNumber: toAsciiDigits(chamberNumber).trim(),
     floor: toAsciiDigits(floor).trim(),
     photoURL: String(photoURL || '').trim(),
+    bannerURL: String(bannerURL || '').trim(),
   };
   doctors.push(doc);
   saveDb();
@@ -1133,7 +1134,7 @@ app.post('/api/doctors', (req, res) => {
 app.put('/api/doctors/:id', (req, res) => {
   const doc = doctors.find((d) => d.id === String(req.params.id));
   if (!doc) return res.status(404).json({ success: false, message: 'Doctor not found' });
-  const { name, nameBn, qualification, specialty, specialtyBn, chamberNumber, floor, photoURL } = req.body || {};
+  const { name, nameBn, qualification, specialty, specialtyBn, chamberNumber, floor, photoURL, bannerURL } = req.body || {};
   if (name && String(name).trim() && String(name).trim().toLowerCase() !== doc.name.toLowerCase() && findDoctor(name)) {
     return res.status(409).json({ success: false, message: 'A doctor with this name already exists' });
   }
@@ -1145,6 +1146,7 @@ app.put('/api/doctors/:id', (req, res) => {
   if (chamberNumber !== undefined) doc.chamberNumber = toAsciiDigits(chamberNumber).trim();
   if (floor !== undefined) doc.floor = toAsciiDigits(floor).trim();
   if (photoURL !== undefined) doc.photoURL = String(photoURL).trim();
+  if (bannerURL !== undefined) doc.bannerURL = String(bannerURL).trim();
   saveDb();
   io.emit('doctors.updated', doctors);
   return res.status(200).json(doc);

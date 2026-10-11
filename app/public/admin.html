@@ -80,6 +80,14 @@
           <input name="photoURL" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="https://... (ছবির লিংক)" />
           <span class="block text-[11px] font-normal text-on-surface-variant mt-1">না দিলে নাম দেখে নারী/পুরুষ ডাক্তারের ছবি নিজে থেকেই বসবে</span>
         </label>
+        <label class="text-sm font-bold">Banner (ঐচ্ছিক — এই ডাক্তারের TV-তে দেখাবে)
+          <input name="bannerURL" id="bannerURL" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="https://... (ব্যানার ছবির লিংক)" />
+          <div class="flex items-center gap-2 mt-1">
+            <input type="file" id="bannerFile" accept="image/jpeg,image/png,image/webp,image/gif" class="text-[12px] flex-1" />
+            <img id="bannerPreview" class="hidden w-16 h-10 object-cover rounded border border-outline-variant" />
+          </div>
+          <span class="block text-[11px] font-normal text-on-surface-variant mt-1">ডাক্তারের নিজের TV স্ক্রিনে (<code>tv.html?doctor=...</code>) announcement-এর জায়গায় এই ব্যানার দেখাবে। না দিলে সবার শেয়ারড announcement দেখাবে।</span>
+        </label>
         <div class="flex gap-2 mt-2">
           <button type="submit" id="submitBtn" class="flex-1 bg-secondary text-on-secondary rounded-xl py-3 font-display font-extrabold active:opacity-90 flex items-center justify-center gap-2">
             <span class="mso">add</span> ADD DOCTOR
@@ -268,6 +276,16 @@
     $('docForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
+      // If a banner image file is chosen, upload it first → use the served URL.
+      let bannerURL = fd.get('bannerURL') || '';
+      const bFile = $('bannerFile').files[0];
+      if (bFile) {
+        const bForm = new FormData(); bForm.append('image', bFile);
+        const up = await fetch(API + '/announcements/upload', { method: 'POST', body: bForm });
+        const upBody = await up.json().catch(() => ({}));
+        if (!up.ok) return msg(upBody.message || 'ব্যানার আপলোড করা গেল না।', false);
+        bannerURL = upBody.url;
+      }
       const payload = {
         name: fd.get('name'),
         nameBn: fd.get('nameBn') || '',
@@ -277,6 +295,7 @@
         chamberNumber: fd.get('chamberNumber') || '',
         floor: fd.get('floor') || '',
         photoURL: fd.get('photoURL') || '',
+        bannerURL,
       };
       const editId = fd.get('id');
       const res = await fetch(editId ? `${API}/doctors/${editId}` : API + '/doctors', {
@@ -294,6 +313,16 @@
       }
     });
 
+    // Live preview for a chosen banner image file.
+    (function () {
+      const bf = document.getElementById('bannerFile');
+      if (bf) bf.addEventListener('change', () => {
+        const bp = document.getElementById('bannerPreview');
+        const f = bf.files[0];
+        if (f) { bp.src = URL.createObjectURL(f); bp.classList.remove('hidden'); }
+      });
+    })();
+
     function editDoc(id) {
       const d = doctors.find((x) => String(x.id) === String(id));
       if (!d) return;
@@ -307,6 +336,10 @@
       f.chamberNumber.value = d.chamberNumber || '';
       f.floor.value = d.floor || '';
       f.photoURL.value = d.photoURL || '';
+      f.bannerURL.value = d.bannerURL || '';
+      $('bannerFile').value = '';
+      const bp = $('bannerPreview');
+      if (d.bannerURL) { bp.src = d.bannerURL; bp.classList.remove('hidden'); } else { bp.classList.add('hidden'); }
       $('formTitle').innerHTML = '<span class="mso text-secondary">edit</span> Edit Doctor';
       $('submitBtn').innerHTML = '<span class="mso">save</span> SAVE CHANGES';
       $('cancelBtn').classList.remove('hidden');
@@ -316,6 +349,7 @@
     function resetForm() {
       $('docForm').reset();
       $('docForm').id.value = '';
+      $('bannerPreview').classList.add('hidden');
       $('formTitle').innerHTML = '<span class="mso text-secondary">person_add</span> Add New Doctor';
       $('submitBtn').innerHTML = '<span class="mso">add</span> ADD DOCTOR';
       $('cancelBtn').classList.add('hidden');

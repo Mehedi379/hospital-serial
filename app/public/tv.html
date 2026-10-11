@@ -231,7 +231,7 @@
       </section>
       <!-- ADS / NOTICES (pics, banners, video) -->
       <section class="box announcementPanel">
-        <div class="boxHdr">Announcements</div>
+        <div class="boxHdr" id="announcementHdr">Announcements</div>
         <div class="boxBody" id="announcementBody"><div id="announcementStage" class="announcementStage"><span class="empty">—</span></div></div>
       </section>
     </div>
@@ -284,7 +284,23 @@
         $('hdrSub').textContent = DOCTOR_FILTER;
       }
       document.title = 'Room TV — ' + (d ? d.name : DOCTOR_FILTER);
+      applyDoctorBanner();
     } catch (e) { console.error('doctor header load failed', e); }
+  }
+
+  /* In per-doctor mode, if the doctor has their own banner, the ads panel shows
+     THAT banner instead of the shared announcements. Returns true when active. */
+  function doctorBannerActive() {
+    return !!(DOCTOR_FILTER && currentDoctor && currentDoctor.bannerURL);
+  }
+  function applyDoctorBanner() {
+    if (!doctorBannerActive()) return false;
+    const hdr = document.getElementById('announcementHdr');
+    if (hdr) hdr.textContent = currentDoctor.name;
+    clearTimeout(announcementTimer);
+    const stage = document.getElementById('announcementStage');
+    if (stage) stage.innerHTML = `<img src="${esc(currentDoctor.bannerURL)}" alt="" />`;
+    return true;
   }
 
   // Escape user-supplied text before putting it in innerHTML (prevents XSS)
@@ -797,9 +813,11 @@
   }
   let lastAnnouncementsSig = null;
   async function loadAnnouncements() {
+    if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor's own banner wins
     try {
       const res = await fetch('/api/announcements');
       const list = await res.json();
+      if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor loaded while fetching → banner wins
       const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));
       const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds]));
       if (sig === lastAnnouncementsSig) return; // unchanged → don't interrupt current playback
