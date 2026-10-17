@@ -575,6 +575,49 @@ app.post('/api/patients/reset', (req, res) => {
   return res.status(200).json({ success: true, message: `${removed.length} জন রোগী মুছে ফেলা হলো — সিরিয়াল আবার ১ থেকে শুরু হবে`, removed: removed.length });
 });
 
+// POST /api/clean-all  -> FULL factory reset: patients, announcements, breaks, current calls.
+//   All connected screens (TVs, assistants, reception) get real-time Socket.IO broadcasts
+//   so they immediately show a clean state. Doctors are PRESERVED (you don't lose your
+//   doctor directory). Archived data is kept for history.
+app.post('/api/clean-all', (req, res) => {
+  const removedPatients = patients.length;
+  const removedAds = ads.length;
+  const removedBreaks = Object.keys(breaks).length;
+
+  // Archive ALL existing patients (not just completed) so nothing is lost.
+  try {
+    const archiveFile = path.join(__dirname, 'data-archive.json');
+    let old = [];
+    if (fs.existsSync(archiveFile)) old = JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
+    fs.writeFileSync(archiveFile, JSON.stringify(old.concat(patients), null, 2));
+  } catch (e) { console.error('  clean-all archive failed:', e.message); }
+
+  // Wipe everything in-memory.
+  patients = [];
+  ads = [];
+  breaks = {};
+  currentCall = null;
+  for (const k of Object.keys(currentCallByDoctor)) delete currentCallByDoctor[k];
+  seq = 0;
+
+  saveDb();
+
+  // Broadcast to every connected client so all screens clean up instantly.
+  io.emit('clear.now.serving');      // TVs hide "now serving" + stop speaking
+  io.emit('patients.reset', { scope: 'all', doctor: null, removed: removedPatients });
+  io.emit('announcements.updated', []);  // clear announcements on TVs
+  io.emit('ads.updated', []);
+  const breakNames = Object.keys(breaks); // capture before wipe
+  for (const doctorName of breakNames) io.emit('break.ended', { doctorName });
+  io.emit('patient.updated', {});    // nudge all panels to reload
+
+  return res.status(200).json({
+    success: true,
+    message: `সব ডেটা পরিষ্কার করা হলো — ${removedPatients} জন রোগী, ${removedAds}টি নোটিশ, ${removedBreaks}টি ব্রেক মুছে ফেলা হলো। সিরিয়াল ১ থেকে শুরু হবে।`,
+    removedPatients, removedAds, removedBreaks,
+  });
+});
+
 // PATCH /api/patients/:id  -> fix a wrong name (or serial). Body: { patientName?, serialNumber? }
 // Name is kept EXACTLY as given. Used by the "edit" (pencil) button in the lists.
 app.patch('/api/patients/:id', (req, res) => {
@@ -786,13 +829,23 @@ app.get('/api/doctors', (req, res) => {
 });
 
 /* ================================================================== */
-/* ADS / NOTICES — scrolling messages shown at the bottom of the TV   */
-/* board. Managed from the admin panel; only ENABLED ones are shown.  */
+/* ADS / NOTICES — scrolling messages shown on the TV board.            */
+/* Managed from the ASSISTANT panel (per-doctor) or admin (global).    */
+/* Announcements can be global (doctorName = null) or scoped to a    */
+/* specific doctor. TVs filter to show only their doctor's notices.   */
 /* ================================================================== */
 const announcementsRouter = express.Router();
 
-// GET / -> all announcements (admin). TV filters to enabled ones itself.
-announcementsRouter.get('/', (req, res) => res.status(200).json(ads));
+// GET / -> all announcements. ?doctor=NAME returns only that doctor's
+// announcements plus global ones.
+announcementsRouter.get('/', (req, res) => {
+  if (req.query.doctor) {
+    const want = String(req.query.doctor).trim().toLowerCase();
+    const filtered = ads.filter((a) => !a.doctorName || String(a.doctorName).toLowerCase() === want);
+    return res.status(200).json(filtered);
+  }
+  return res.status(200).json(ads);
+});
 
 // POST /upload -> save an image locally so TVs do not depend on
 // third-party image hosts or their hotlink/embedding policies.
@@ -810,7 +863,9 @@ announcementsRouter.post('/upload', (req, res) => {
   });
 });
 
-// POST / { type, text?, url?, seconds? } -> add a notice / picture / video
+// POST / { type, text?, url?, seconds?, doctorName? } -> add a notice / picture / video
+// doctorName is optional: if set, only the named doctor's TV shows it. If absent,
+// the announcement is global (shown on all TVs).
 announcementsRouter.post('/', (req, res) => {
   const b = req.body || {};
   const type = ['image', 'video', 'text'].includes(b.type) ? b.type : (b.url ? 'image' : 'text');
@@ -819,7 +874,8 @@ announcementsRouter.post('/', (req, res) => {
   if (type === 'text' && !text) return res.status(400).json({ success: false, message: 'নোটিশের লেখা দিন' });
   if (type !== 'text' && !url) return res.status(400).json({ success: false, message: 'ছবি/ভিডিওর লিংক দিন' });
   const seconds = Math.max(4, Math.min(300, Number(b.seconds) || (type === 'video' ? 30 : 10)));
-  const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, createdAt: new Date().toISOString() };
+  const doctorName = b.doctorName ? String(b.doctorName).trim() : null;
+  const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, doctorName, createdAt: new Date().toISOString() };
   ads.push(ad);
   saveDb();
   io.emit('announcements.updated', ads);
@@ -827,7 +883,7 @@ announcementsRouter.post('/', (req, res) => {
   return res.status(201).json({ success: true, data: ad });
 });
 
-// PUT /:id { text?, url?, seconds?, enabled? } -> edit or show/hide
+// PUT /:id { text?, url?, seconds?, enabled?, doctorName? } -> edit or show/hide
 announcementsRouter.put('/:id', (req, res) => {
   const ad = ads.find((a) => String(a.id) === String(req.params.id));
   if (!ad) return res.status(404).json({ success: false, message: 'Ad not found' });
@@ -836,6 +892,7 @@ announcementsRouter.put('/:id', (req, res) => {
   if (typeof b.url === 'string') ad.url = b.url.trim().slice(0, 1000);
   if (b.seconds != null) ad.seconds = Math.max(4, Math.min(300, Number(b.seconds) || ad.seconds));
   if (typeof b.enabled === 'boolean') ad.enabled = b.enabled;
+  if (b.doctorName !== undefined) ad.doctorName = b.doctorName ? String(b.doctorName).trim() : null;
   saveDb();
   io.emit('announcements.updated', ads);
   io.emit('ads.updated', ads);

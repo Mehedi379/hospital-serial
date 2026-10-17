@@ -685,9 +685,10 @@
   /* ---- Socket events ---- */
   socket.on('patient.called', (p) => { if (matchesDoctor(p)) { hideBreak(); render(p); speak(p); } loadQueue(); });
   socket.on('current.call', (p) => { render(p); loadQueue(); }); // restore on connect, no voice
+  socket.on('clear.now.serving', () => { $('serial').textContent = '—'; if ($('serialName')) $('serialName').textContent = ''; $('proceedRoom').textContent = 'Waiting for the next patient…'; loadQueue(); scheduleFit(); });
   socket.on('patient.updated', loadQueue);
   socket.on('patient.added', loadQueue);
-  socket.on('connect', () => { console.log('TV connected' + (DOCTOR_FILTER ? ' (doctor: ' + DOCTOR_FILTER + ')' : '')); primeAudio(); loadQueue(); });
+  socket.on('connect', () => { console.log('TV connected' + (DOCTOR_FILTER ? ' (doctor: ' + DOCTOR_FILTER + ')' : '')); primeAudio(); loadQueue(); loadAnnouncements(); });
 
   /* ---- Doctor breaks (lunch / namaz / other) ---- */
   let currentBreak = null;
@@ -815,7 +816,9 @@
   async function loadAnnouncements() {
     if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor's own banner wins
     try {
-      const res = await fetch('/api/announcements');
+      // Per-doctor TV: fetch only that doctor's announcements plus global ones.
+      const url = '/api/announcements' + (DOCTOR_FILTER ? '?doctor=' + encodeURIComponent(DOCTOR_FILTER) : '');
+      const res = await fetch(url);
       const list = await res.json();
       if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor loaded while fetching → banner wins
       const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));

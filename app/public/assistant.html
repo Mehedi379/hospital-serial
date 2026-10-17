@@ -266,6 +266,24 @@
     <button onclick="resetMine()" class="mt-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-error-container text-on-error-container font-bold text-sm active:scale-95">
       <span class="mso text-[18px]">restart_alt</span> আজকের রোগী মুছে সিরিয়াল ১ থেকে শুরু
     </button>
+
+    <!-- Announcements (per-doctor assistant manages their doctor's TV notices) -->
+    <div class="mt-3 bg-surface-container-lowest rounded-2xl shadow-md p-4">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="mso text-secondary text-[20px]">campaign</span>
+          <span class="font-display font-bold text-lg">TV Announcements</span>
+        </div>
+        <button onclick="openAnnounceModal()" class="w-8 h-8 rounded-full bg-secondary text-on-secondary flex items-center justify-center">
+          <span class="mso text-[18px]">add</span>
+        </button>
+      </div>
+      <p class="text-[11px] text-on-surface-variant mb-2">
+        আপনার রোগীদের TV-তে যে নোটিশটি দেখাবেন তা যোগ করুন (টেক্সট / ছবি / ভিডিও)। এই নোটিশটি শুধু আপনার ডাক্তারের রুমের TV-তে দেখাবে।
+      </p>
+      <ul id="announceList" class="flex flex-col gap-2"></ul>
+      <div id="announceEmpty" class="text-center text-on-surface-variant py-6 text-sm">কোনো নোটিশ নেই। যোগ করতে + চাপুন।</div>
+    </div>
   </main>
 
   <!-- Toast -->
@@ -354,6 +372,36 @@
         <button onclick="kp('0')" class="h-12 rounded-lg bg-surface-container text-xl font-bold">0</button>
         <button onclick="submitKeypad()" class="h-12 rounded-lg bg-secondary text-on-secondary text-sm font-bold">CALL</button>
       </div>
+    </div>
+  </div>
+
+  <!-- =============== ANNOUNCEMENT MODAL =============== -->
+  <div id="announceModal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm items-end justify-center hidden">
+    <div class="w-full max-w-lg bg-surface-container-lowest rounded-t-2xl p-4 flex flex-col gap-3 shadow-2xl pb-safe">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="mso text-secondary text-[22px]">campaign</span>
+          <span class="font-display font-bold text-lg">Add Announcement</span>
+        </div>
+        <button onclick="closeAnnounceModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
+      </div>
+      <form id="announceForm" class="flex flex-col gap-3">
+        <label class="text-sm font-bold">Type
+          <select name="adType" id="aType" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
+            <option value="text">Text Notice</option>
+            <option value="image">Image / Banner</option>
+            <option value="video">Video</option>
+          </select>
+        </label>
+        <input id="announceText" maxlength="300" class="w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Notice text (what to display on TV)" />
+        <input id="announceUrl" maxlength="1000" class="hidden w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="Image or video URL (https://...)" />
+        <label class="text-sm font-bold">Duration (seconds)
+          <input id="announceSeconds" type="number" min="4" max="300" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold" placeholder="10" />
+        </label>
+        <button type="submit" class="bg-secondary text-on-secondary rounded-xl py-3 font-display font-extrabold flex items-center justify-center gap-2">
+          <span class="mso">add</span> সংযোজন করুন
+        </button>
+      </form>
     </div>
   </div>
 
@@ -494,6 +542,21 @@
         if (current) {
           const fresh = patients.find((p) => p.id === current.id);
           if (fresh) current = fresh;
+          else {
+            // Patient was cleaned/removed — clear the stale "now calling" state
+            // so it doesn't block the next call (the original Clean Button bug).
+            current = null;
+            $('curSerial').textContent = '--';
+            $('curName').textContent = 'No patient';
+            $('curNameBn').textContent = '';
+            $('curDoctor').textContent = 'Press CALL on a patient below';
+            $('curChamberTag').textContent = '';
+            $('curStatusTag').innerHTML = '<span class="px-2.5 py-1 rounded-lg bg-secondary/20 text-secondary-fixed text-[11px] font-bold uppercase">Idle</span>';
+            if (!DOCTOR_FILTER) {
+              $('hdrDoctor').textContent = 'Assistant Panel';
+              $('hdrChamber').textContent = '—';
+            }
+          }
         }
         renderMetrics();
         updateActionButtons();
@@ -864,6 +927,31 @@
     socket.on('patient.updated', load);
     socket.on('patient.called', (p) => { load(); });
     socket.on('current.call', (p) => { if (matchesDoctor(p)) setCurrent(p); }); // per-doctor panel ignores other doctors' calls
+    // Clear stale "now calling" state when the server wipes the board.
+    socket.on('clear.now.serving', () => {
+      if (current) {
+        current = null;
+        $('curSerial').textContent = '--';
+        $('curName').textContent = 'No patient';
+        $('curNameBn').textContent = '';
+        $('curDoctor').textContent = 'Press CALL on a patient below';
+        $('curChamberTag').textContent = '';
+        $('curStatusTag').innerHTML = '<span class="px-2.5 py-1 rounded-lg bg-secondary/20 text-secondary-fixed text-[11px] font-bold uppercase">Idle</span>';
+        updateActionButtons();
+      }
+    });
+    socket.on('patients.reset', () => {
+      if (current) {
+        current = null;
+        $('curSerial').textContent = '--';
+        $('curName').textContent = 'No patient';
+        $('curNameBn').textContent = '';
+        $('curDoctor').textContent = 'Press CALL on a patient below';
+        $('curChamberTag').textContent = '';
+        $('curStatusTag').innerHTML = '<span class="px-2.5 py-1 rounded-lg bg-secondary/20 text-secondary-fixed text-[11px] font-bold uppercase">Idle</span>';
+        updateActionButtons();
+      }
+    });
     socket.on('connect', () => $('conn').classList.remove('opacity-50'));
     socket.on('disconnect', () => $('conn').classList.add('opacity-50'));
 
@@ -939,6 +1027,116 @@
       if (!isSecureCtx) { goAddHome(); return; }
       if (!deferredPrompt) openInstallGuide();
     }, 1500);
+
+    /* ---------- Announcement management (per-doctor) ---------- */
+    let announcements = [];
+    function announceTypeLabel(t) { return t === 'image' ? 'ছবি' : t === 'video' ? 'ভিডিও' : 'টেক্সট'; }
+    function announceTypeIcon(t) { return t === 'image' ? 'image' : t === 'video' ? 'movie' : 'notes'; }
+
+    async function loadAnnouncements() {
+      try {
+        // In per-doctor mode: fetch only this doctor's announcements
+        const url = DOCTOR_FILTER
+          ? API + '/announcements?doctor=' + encodeURIComponent(DOCTOR_FILTER)
+          : API + '/announcements';
+        const res = await fetch(url);
+        announcements = await res.json();
+        renderAnnouncements();
+      } catch (e) { console.error('announcements load failed', e); }
+    }
+    function renderAnnouncements() {
+      const empty = $('announceEmpty');
+      const list = $('announceList');
+      if (!announcements.length) {
+        empty.style.display = 'block';
+        list.innerHTML = '';
+        return;
+      }
+      empty.style.display = 'none';
+      list.innerHTML = announcements.map((a) => `
+        <div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
+          <span class="mso text-secondary shrink-0" title="${announceTypeLabel(a.type)}">${announceTypeIcon(a.type)}</span>
+          <div class="flex-1 min-w-0">
+            <div class="truncate font-medium">${a.type === 'text' ? esc(a.text || '') : esc(a.url || '')}</div>
+            <div class="text-[11px] text-on-surface-variant flex items-center gap-1">
+              <span>${announceTypeLabel(a.type)}</span>
+              <span>•</span>
+              <span>${a.seconds}s</span>
+              <span>•</span>
+              <span class="${a.enabled ? 'text-secondary' : 'text-error'}">${a.enabled ? 'চালু' : 'বন্ধ'}</span>
+            </div>
+          </div>
+          <button onclick="toggleAnnounce('${a.id}', ${!a.enabled})" class="px-2.5 py-1.5 rounded-lg text-xs font-bold ${a.enabled ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">
+            ${a.enabled ? 'বন্ধ' : 'চালু'}
+          </button>
+          <button onclick="deleteAnnounce('${a.id}')" class="px-2.5 py-1.5 rounded-lg bg-error-container text-on-error-container text-xs font-bold"><span class="mso text-[14px]">delete</span></button>
+        </div>
+      `).join('');
+    }
+
+    function openAnnounceModal() {
+      $('announceModal').classList.remove('hidden');
+      $('announceModal').classList.add('flex');
+      document.body.classList.add('modal-open');
+      $('announceText').value = '';
+      $('announceUrl').value = '';
+      $('announceSeconds').value = '';
+      $('announceUrl').classList.add('hidden');
+    }
+    function closeAnnounceModal() {
+      $('announceModal').classList.add('hidden');
+      $('announceModal').classList.remove('flex');
+      document.body.classList.remove('modal-open');
+    }
+
+    // Show the right input based on type
+    $('aType').addEventListener('change', () => {
+      const t = $('aType').value;
+      $('announceUrl').classList.toggle('hidden', t === 'text');
+    });
+
+    $('announceForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const type = $('aType').value;
+      const payload = {
+        type,
+        text: $('announceText').value.trim(),
+        url: $('announceUrl').value.trim(),
+        seconds: Number($('announceSeconds').value) || undefined,
+        doctorName: DOCTOR_FILTER || null,
+      };
+      if (type === 'text' && !payload.text) { showToast('⚠ নোটিশের লেখা দিন', 'warn'); return; }
+      if (type !== 'text' && !payload.url) { showToast('⚠ লিংক দিন', 'warn'); return; }
+      const res = await fetch(API + '/announcements', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        showToast('✅ নোটিশ যোগ হলো', 'ok');
+        closeAnnounceModal();
+        loadAnnouncements();
+      } else {
+        const b = await res.json().catch(() => ({}));
+        showToast('⚠ ' + (b.message || 'যোগ করা গেল না'), 'err');
+      }
+    });
+
+    async function toggleAnnounce(id, enabled) {
+      await fetch(API + '/announcements/' + id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      loadAnnouncements();
+    }
+    async function deleteAnnounce(id) {
+      if (!confirm('এই নোটিশ মুছে ফেলবেন?')) return;
+      await fetch(API + '/announcements/' + id, { method: 'DELETE' });
+      loadAnnouncements();
+    }
+
+    socket.on('announcements.updated', loadAnnouncements);
+    socket.on('ads.updated', loadAnnouncements);
+
+    loadAnnouncements();
   </script>
 </body>
 </html>

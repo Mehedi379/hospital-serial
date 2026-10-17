@@ -156,38 +156,21 @@
         </div>
       </div>
 
-      <!-- ============ ADS / NOTICES ============ -->
-      <div class="bg-surface-container-lowest rounded-2xl shadow-md p-5 mt-2">
+      <!-- ============ CLEAN ALL ============ -->
+      <div class="bg-error-container/40 border border-error-container rounded-2xl p-5 mt-2">
         <div class="flex items-center gap-2 mb-1">
-          <span class="mso text-secondary">campaign</span>
-          <h2 class="font-display font-bold text-lg">বিজ্ঞাপন / নোটিশ (TV স্ক্রিনে চলবে)</h2>
+          <span class="mso text-error">cleaning</span>
+          <h2 class="font-display font-bold text-lg text-on-error-container">সব ডেটা পরিষ্কার করুন</h2>
         </div>
         <p class="text-[12px] text-on-surface-variant mb-3">
-          TV স্ক্রিনের <b>Announcements বক্সে</b> লেখা নোটিশ, ছবি/ব্যানার বা ভিডিও ঘুরে ঘুরে দেখাবে। ছবি আপলোড করুন অথবা ছবির URL দিন—যেকোনো একটি হলেই হবে। ভিডিওর জন্য YouTube বা .mp4 লিংক দিন।
+          এই বাটনটি চাপলে <b>সব</b> মুছে যাবে — রোগীর তালিকা, ডাক্তারের ব্রেক, বর্তমান কল সবই একসাথে পরিষ্কার হবে। সিরিয়াল আবার ১ থেকে শুরু হবে। (ডাক্তারের তালিকা ও archive থেকে ডেটা ফিরিয়ে আনা যায়।)
         </p>
-        <form id="adForm" class="flex flex-col gap-2 mb-3">
-          <div class="flex gap-2">
-            <select id="adType" class="bg-surface-container-low rounded-lg px-3 py-2.5 font-bold text-sm">
-              <option value="text">লেখা নোটিশ</option>
-              <option value="image">ছবি / ব্যানার</option>
-              <option value="video">ভিডিও</option>
-            </select>
-            <input id="adSeconds" type="number" min="4" max="300" class="w-24 bg-surface-container-low rounded-lg px-3 py-2.5 font-mono font-bold text-sm" placeholder="সেকেন্ড" title="কত সেকেন্ড দেখাবে" />
-          </div>
-          <input id="adText" maxlength="300" class="bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="লেখা নোটিশ / ছবির ক্যাপশন" />
-          <label id="adUploadWrap" class="hidden flex-col gap-1 text-sm font-bold">
-            ছবি / ব্যানার বাছাই করুন
-            <input id="adFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium text-sm" />
-            <span class="text-[11px] font-normal text-on-surface-variant">JPG, PNG, WEBP বা GIF • সর্বোচ্চ ১০ MB</span>
-          </label>
-          <input id="adUrl" maxlength="1000" class="hidden bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="ছবি বা ভিডিওর লিংক (https://...)" />
-          <div id="adUrlHint" class="hidden text-[11px] text-on-surface-variant -mt-1">ছবি আপলোড করুন অথবা ছবির URL দিন। দুটো দিলে আপলোড করা ছবিটি ব্যবহার হবে।</div>
-          <button type="submit" class="bg-secondary text-on-secondary rounded-xl px-4 py-2.5 font-bold flex items-center justify-center gap-1"><span class="mso">add</span> যোগ করুন</button>
-        </form>
-        <div id="adMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
-        <div id="adList" class="flex flex-col gap-2"></div>
-        <div id="adEmpty" class="text-center text-on-surface-variant py-4 text-sm">এখনো কোনো নোটিশ নেই।</div>
+        <div id="cleanMsg" class="hidden mb-3 text-sm font-bold rounded-lg px-3 py-2"></div>
+        <button onclick="cleanAll()" class="w-full bg-error text-on-error rounded-xl py-3 font-bold flex items-center justify-center gap-2">
+          <span class="mso">cleaning</span> পুরোটা পরিষ্কার করুন
+        </button>
       </div>
+
     </section>
   </main>
 
@@ -383,97 +366,24 @@
       }
     }
 
+    async function cleanAll() {
+      if (!confirm('সত্যিই সব ডাটা পরিষ্কার করবেন? রোগীর তালিকা, ব্রেক, বর্তমান কল — সবই মুছে যাবে। সিরিয়াল ১ থেকে শুরু হবে।')) return;
+      const box = $('cleanMsg');
+      try {
+        const res = await fetch(API + '/clean-all', { method: 'POST' });
+        const body = await res.json();
+        box.textContent = body.message || 'Done';
+        box.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 bg-secondary-container/30 text-on-secondary-container';
+        box.classList.remove('hidden');
+      } catch (e) {
+        box.textContent = 'পরিষ্কার করা ব্যর্থ হলো';
+        box.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 bg-error-container text-on-error-container';
+        box.classList.remove('hidden');
+      }
+    }
+
     socket.on('doctors.updated', () => load());
     load();
-
-    /* ============ ADS / NOTICES ============ */
-    let ads = [];
-    function adMsg(text, ok) {
-      const el = $('adMsg');
-      el.textContent = text;
-      el.className = 'mb-3 text-sm font-bold rounded-lg px-3 py-2 ' + (ok ? 'bg-secondary-container/30 text-on-secondary-container' : 'bg-error-container text-on-error-container');
-      el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 3000);
-    }
-    async function loadAds() {
-      try {
-        const res = await fetch(API + '/announcements');
-        ads = await res.json();
-      } catch (e) { ads = []; }
-      $('adEmpty').style.display = ads.length ? 'none' : 'block';
-      const kindLabel = { text: 'লেখা', image: 'ছবি', video: 'ভিডিও' };
-      const kindIcon = { text: 'notes', image: 'image', video: 'movie' };
-      $('adList').innerHTML = ads.map((a) => {
-        const t = a.type || (a.url ? 'image' : 'text');
-        const preview = t === 'text' ? esc(a.text || '') : esc(a.url || '');
-        return `
-        <div class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3">
-          <span class="mso text-secondary shrink-0" title="${kindLabel[t]}">${kindIcon[t]}</span>
-          <div class="flex-1 min-w-0 ${a.enabled ? '' : 'opacity-50 line-through'}">
-            <div class="truncate">${preview}</div>
-            <div class="text-[11px] text-on-surface-variant">${kindLabel[t]} • ${esc(String(a.seconds || 10))}s</div>
-          </div>
-          <button onclick="toggleAd('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})" class="px-3 py-1.5 rounded-lg text-sm font-bold shrink-0 ${a.enabled ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${a.enabled ? 'চালু' : 'বন্ধ'}</button>
-          <button onclick="deleteAd('${esc(a.id)}')" class="px-3 py-1.5 rounded-lg bg-error-container text-on-error-container text-sm font-bold flex items-center shrink-0"><span class="mso text-[16px]">delete</span></button>
-        </div>`;
-      }).join('');
-    }
-    // Show the right input(s) for the chosen ad type.
-    function syncAdForm() {
-      const t = $('adType').value;
-      $('adUrl').classList.toggle('hidden', t === 'text');
-      $('adUploadWrap').classList.toggle('hidden', t !== 'image');
-      $('adUrlHint').classList.toggle('hidden', t !== 'image');
-      $('adText').placeholder = t === 'text' ? 'লেখা নোটিশ' : 'ক্যাপশন (ঐচ্ছিক)';
-      $('adFile').required = false;
-      $('adUrl').placeholder = t === 'image' ? 'ছবির URL (https://...)' : 'ভিডিওর লিংক — YouTube বা .mp4';
-    }
-    $('adType').addEventListener('change', syncAdForm);
-    syncAdForm();
-    $('adForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const type = $('adType').value;
-      const payload = {
-        type,
-        text: $('adText').value.trim(),
-        url: $('adUrl').value.trim(),
-        seconds: Number($('adSeconds').value) || undefined,
-      };
-      if (type === 'text' && !payload.text) return adMsg('লেখা দিন।', false);
-      if (type === 'image' && !$('adFile').files.length && !payload.url) return adMsg('ছবি আপলোড করুন অথবা ছবির URL দিন।', false);
-      if (type === 'image' && $('adFile').files.length) {
-        const formData = new FormData();
-        formData.append('image', $('adFile').files[0]);
-        const uploadRes = await fetch(API + '/announcements/upload', { method: 'POST', body: formData });
-        const uploaded = await uploadRes.json().catch(() => ({}));
-        if (!uploadRes.ok) return adMsg(uploaded.message || 'ছবি আপলোড করা গেল না।', false);
-        payload.url = uploaded.url;
-      }
-      if (type === 'video' && !payload.url) return adMsg('ভিডিওর লিংক দিন।', false);
-      const res = await fetch(API + '/announcements', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        $('adText').value = ''; $('adUrl').value = ''; $('adFile').value = ''; $('adSeconds').value = '';
-        adMsg('যোগ হয়েছে ✓', true); loadAds();
-      } else {
-        const b = await res.json().catch(() => ({}));
-        adMsg(b.message || 'যোগ করা গেল না।', false);
-      }
-    });
-    async function toggleAd(id, enabled) {
-      await fetch(API + '/announcements/' + id, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }),
-      });
-      loadAds();
-    }
-    async function deleteAd(id) {
-      if (!confirm('এই নোটিশ মুছে ফেলবেন?')) return;
-      await fetch(API + '/announcements/' + id, { method: 'DELETE' });
-      loadAds();
-    }
-    socket.on('announcements.updated', loadAds);
-    loadAds();
   </script>
 </body>
 </html>
