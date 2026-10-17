@@ -166,10 +166,6 @@
       text-align: center; padding: var(--pad); background: #c22832; color: #fff;
       font-family: 'Poppins', sans-serif; font-weight: 800; font-size: var(--hdr); line-height: 1.25;
     }
-    .announcementStage .annAccount {
-      margin-top: 8px; font-size: calc(var(--hdr) * 0.45); font-weight: 600;
-      background: rgba(255,255,255,0.2); padding: 2px 10px; border-radius: 6px;
-    }
 
     #breakStrip {
       display: none; flex-wrap: wrap; gap: 8px 18px; align-items: center;
@@ -812,8 +808,7 @@
         v.addEventListener('error', next, { once: true });
       }
     } else {
-      const extra = a.account ? `<div class="annAccount">${esc(a.account)}</div>` : '';
-      stage.innerHTML = `<div class="announcementText">${esc(a.text)}</div>${extra}`;
+      stage.innerHTML = `<div class="announcementText">${esc(a.text)}</div>`;
       announcementTimer = setTimeout(next, secs * 1000);
     }
   }
@@ -827,7 +822,7 @@
       const list = await res.json();
       if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor loaded while fetching → banner wins
       const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));
-      const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds, a.enabled, a.account]));
+      const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds, a.enabled]));
       if (sig === lastAnnouncementsSig) return; // unchanged → don't interrupt current playback
       lastAnnouncementsSig = sig;
       announcementItems = enabled;

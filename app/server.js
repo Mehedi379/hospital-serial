@@ -863,10 +863,9 @@ announcementsRouter.post('/upload', (req, res) => {
   });
 });
 
-// POST / { type, text?, url?, seconds?, doctorName?, account? } -> add a notice / picture / video
+// POST / { type, text?, url?, seconds?, doctorName? } -> add a notice / picture / video
 // doctorName is optional: if set, only the named doctor's TV shows it. If absent,
 // the announcement is global (shown on all TVs).
-// account is optional: the billing/department label shown alongside the notice.
 announcementsRouter.post('/', (req, res) => {
   const b = req.body || {};
   const type = ['image', 'video', 'text'].includes(b.type) ? b.type : (b.url ? 'image' : 'text');
@@ -876,8 +875,7 @@ announcementsRouter.post('/', (req, res) => {
   if (type !== 'text' && !url) return res.status(400).json({ success: false, message: 'ছবি/ভিডিওর লিংক দিন' });
   const seconds = Math.max(4, Math.min(300, Number(b.seconds) || (type === 'video' ? 30 : 10)));
   const doctorName = b.doctorName ? String(b.doctorName).trim() : null;
-  const account = b.account != null ? String(b.account).trim().slice(0, 100) : '';
-  const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, doctorName, account, createdAt: new Date().toISOString() };
+  const ad = { id: String(++adSeq), type, text, url, seconds, enabled: true, doctorName, createdAt: new Date().toISOString() };
   ads.push(ad);
   saveDb();
   io.emit('announcements.updated', ads);
@@ -885,7 +883,7 @@ announcementsRouter.post('/', (req, res) => {
   return res.status(201).json({ success: true, data: ad });
 });
 
-// PUT /:id { text?, url?, seconds?, enabled?, doctorName?, account? } -> edit or show/hide
+// PUT /:id { text?, url?, seconds?, enabled?, doctorName? } -> edit or show/hide
 announcementsRouter.put('/:id', (req, res) => {
   const ad = ads.find((a) => String(a.id) === String(req.params.id));
   if (!ad) return res.status(404).json({ success: false, message: 'Ad not found' });
@@ -895,7 +893,6 @@ announcementsRouter.put('/:id', (req, res) => {
   if (b.seconds != null) ad.seconds = Math.max(4, Math.min(300, Number(b.seconds) || ad.seconds));
   if (typeof b.enabled === 'boolean') ad.enabled = b.enabled;
   if (b.doctorName !== undefined) ad.doctorName = b.doctorName ? String(b.doctorName).trim() : null;
-  if (b.account !== undefined) ad.account = b.account != null ? String(b.account).trim().slice(0, 100) : '';
   saveDb();
   io.emit('announcements.updated', ads);
   io.emit('ads.updated', ads);
