@@ -387,7 +387,13 @@
       </div>
       <form id="announceForm" class="flex flex-col gap-3">
         <label class="text-sm font-bold">Account / হিসাব
-          <input id="announceAccount" maxlength="100" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="e.g. Cash, Card, Online — ঐচ্ছিক" />
+          <select id="announceAccount" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
+            <option value="">— ঐচ্ছিক —</option>
+            <option value="Cash">💰 Cash</option>
+            <option value="Card">💳 Card</option>
+            <option value="Online">📱 Online</option>
+            <option value="অন্যান্য">অন্যান্য</option>
+          </select>
         </label>
         <label class="text-sm font-bold">Type
           <select name="adType" id="aType" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
@@ -1108,7 +1114,7 @@
         url: $('announceUrl').value.trim(),
         seconds: Number($('announceSeconds').value) || undefined,
         doctorName: DOCTOR_FILTER || null,
-        account: $('announceAccount').value.trim() || undefined,
+        account: $('announceAccount').value || undefined,
       };
       if (type === 'text' && !payload.text) { showToast('⚠ নোটিশের লেখা দিন', 'warn'); return; }
       if (type !== 'text' && !payload.url) { showToast('⚠ লিংক দিন', 'warn'); return; }
