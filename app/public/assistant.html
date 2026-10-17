@@ -386,6 +386,9 @@
         <button onclick="closeAnnounceModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center"><span class="mso text-[18px]">close</span></button>
       </div>
       <form id="announceForm" class="flex flex-col gap-3">
+        <label class="text-sm font-bold">Account / হিসাব
+          <input id="announceAccount" maxlength="100" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium" placeholder="e.g. Cash, Card, Online — ঐচ্ছিক" />
+        </label>
         <label class="text-sm font-bold">Type
           <select name="adType" id="aType" class="mt-1 w-full bg-surface-container-low rounded-lg px-3 py-2.5 font-medium">
             <option value="text">Text Notice</option>
@@ -1081,6 +1084,7 @@
       $('announceText').value = '';
       $('announceUrl').value = '';
       $('announceSeconds').value = '';
+      $('announceAccount').value = '';
       $('announceUrl').classList.add('hidden');
     }
     function closeAnnounceModal() {
@@ -1104,6 +1108,7 @@
         url: $('announceUrl').value.trim(),
         seconds: Number($('announceSeconds').value) || undefined,
         doctorName: DOCTOR_FILTER || null,
+        account: $('announceAccount').value.trim() || undefined,
       };
       if (type === 'text' && !payload.text) { showToast('⚠ নোটিশের লেখা দিন', 'warn'); return; }
       if (type !== 'text' && !payload.url) { showToast('⚠ লিংক দিন', 'warn'); return; }
