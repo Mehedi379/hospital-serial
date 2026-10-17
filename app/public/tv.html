@@ -827,7 +827,7 @@
       const list = await res.json();
       if (doctorBannerActive()) { applyDoctorBanner(); return; } // doctor loaded while fetching → banner wins
       const enabled = (Array.isArray(list) ? list : []).filter((a) => a && a.enabled && (a.text || a.url));
-      const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds]));
+      const sig = JSON.stringify(enabled.map((a) => [a.id, a.type, a.text, a.url, a.seconds, a.enabled, a.account]));
       if (sig === lastAnnouncementsSig) return; // unchanged → don't interrupt current playback
       lastAnnouncementsSig = sig;
       announcementItems = enabled;
