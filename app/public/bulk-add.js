@@ -150,6 +150,13 @@
     if (tab !== 'scan') stopCamera();
   }
 
+  /* ---- Transliterate English names to Bangla for display ----------------- */
+  function displayBn(name) {
+    if (typeof window !== 'undefined' && window.translit) {
+      return window.translit.toBangla(name);
+    }
+    return name;
+  }
   /* ---- Editable name list ------------------------------------------------ */
   function addNames(list) {
     if (!list || !list.length) return;
@@ -161,9 +168,12 @@
     el.count.textContent = state.names.length;
     el.empty.style.display = state.names.length ? 'none' : 'block';
     el.list.innerHTML = state.names.map((n, i) => `
-      <div class="baRow flex items-center gap-2">
+      <div class="baRow flex items-center gap-1">
         <span class="font-mono text-sm font-bold w-8 text-center text-on-surface-variant shrink-0">${base + i}</span>
-        <input value="${esc(n)}" data-i="${i}" class="baName flex-1 bg-surface-container-low rounded-lg px-2.5 py-2 text-sm font-medium" />
+        <div class="flex-1 flex flex-col gap-0.5">
+          <input value="${esc(n)}" data-i="${i}" class="baName w-full bg-surface-container-low rounded-lg px-2.5 py-2 text-sm font-medium" />
+          <span class="text-[11px] text-on-surface-variant">${esc(displayBn(n))}</span>
+        </div>
         <button data-i="${i}" class="baDel w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center shrink-0"><span class="mso text-[16px]">close</span></button>
       </div>`).join('');
     el.list.querySelectorAll('.baName').forEach((inp) => {
