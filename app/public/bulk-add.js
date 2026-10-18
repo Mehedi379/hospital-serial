@@ -44,7 +44,7 @@
       const cols = s.split(/[,\t;|]+/).map((c) => c.trim()).filter(Boolean);
       const scored = cols
         .filter((c) => (c.match(/[\p{L}]/gu) || []).length >= 2) // has ≥2 letters
-        .sort((a, b) => (b.match(/[\p{L}]/gu) || []).length - (a.match(/[\p{L}]/gu) || []).length;
+        .sort((a, b) => (b.match(/[\p{L}]/gu) || []).length - (a.match(/[\p{L}]/gu) || []).length);
       s = scored[0] || cols[0] || s;
     }
     s = s.replace(/^\s*[0-9০-৯]+\s*[.\):\-–—]?\s*/, ''); // drop leading "12. " / "১২) " / "3 Name"
