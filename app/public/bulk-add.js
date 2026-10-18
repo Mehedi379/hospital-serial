@@ -44,7 +44,7 @@
         .sort((a, b) => (b.match(/[\p{L}]/gu) || []).length - (a.match(/[\p{L}]/gu) || []).length);
       s = scored[0] || cols[0] || s;
     }
-    s = s.replace(/^\s*[0-9০-৯]+\s*[.):\-–—]\s*/, ''); // drop leading "12. " / "১২) "
+    s = s.replace(/^\s*[0-9০-৯]+\s*[.\):\-–—]?\s*/, ''); // drop leading "12. " / "১২) " / "3 Name"
     s = s.replace(/\s{2,}/g, ' ').trim();
     return s;
   }
