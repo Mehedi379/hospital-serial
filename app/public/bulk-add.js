@@ -34,22 +34,48 @@
      Daily lists usually look like "1. Md Karim", "2) Rahim", "12 - Sultana"
      or CSV "12,Md Karim,Male". Strip a leading serial + separator, and for a
      comma/tab row keep the field that looks most like a name (most letters). */
+  const GARBAGE = /[\]\[(){}<>*#~]|[^\p{L}\s'.\-ঀ-৿০-৯]/u; // reject lines with stray symbols
   function cleanName(line) {
     let s = String(line == null ? '' : line).trim();
     if (!s) return '';
+    // Split on newlines within a line (OCR sometimes merges)
+    s = s.split(/\n/)[0].trim();
     if (/[,\t;|]/.test(s)) {
       const cols = s.split(/[,\t;|]+/).map((c) => c.trim()).filter(Boolean);
       const scored = cols
         .filter((c) => (c.match(/[\p{L}]/gu) || []).length >= 2) // has ≥2 letters
-        .sort((a, b) => (b.match(/[\p{L}]/gu) || []).length - (a.match(/[\p{L}]/gu) || []).length);
+        .sort((a, b) => (b.match(/[\p{L}]/gu) || []).length - (a.match(/[\p{L}]/gu) || []).length;
       s = scored[0] || cols[0] || s;
     }
     s = s.replace(/^\s*[0-9০-৯]+\s*[.\):\-–—]?\s*/, ''); // drop leading "12. " / "১২) " / "3 Name"
     s = s.replace(/\s{2,}/g, ' ').trim();
     return s;
   }
+  // Reject OCR garbage: mixed scripts, stray symbols, too short, non-name tokens
+  function isValidName(s) {
+    if (!s || s.length < 3) return false;
+    if (GARBAGE.test(s)) return false;
+    const letters = (s.match(/[\p{L}]/gu) || []).length;
+    if (letters < 2) return false; // at least 2 letters
+    // Reject if contains mixed English+Bengali words in same token
+    const words = s.split(/\s+/);
+    const hasMixed = words.some((w) => /[ঀ-৿]/.test(w) && /[a-zA-Z]/.test(w));
+    if (hasMixed) return false;
+    // Reject if starts with non-letter
+    if (!/^[\p{L}]/u.test(s)) return false;
+    // Reject single-word fragments that look like OCR garbage (need ≥5 for a plausible name)
+    if (words.length === 1 && (s.match(/[\p{L}]/gu) || []).length < 5) return false;
+    // Reject single-letter words (OCR often splits "Mehedi" into "M" "ehedi")
+    if (words.some((w) => w.length === 1)) return false;
+    // Reject words with digits embedded (OCR garbled)
+    if (/\d/.test(s)) return false;
+    return true;
+  }
   function namesFromText(txt) {
-    return String(txt || '').split(/\r?\n/).map(cleanName).filter(Boolean);
+    return String(txt || '')
+      .split(/\r?\n/)
+      .map(cleanName)
+      .filter((s) => s && isValidName(s));
   }
 
   /* ---- Build the modal once ---------------------------------------------- */
